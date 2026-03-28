@@ -10,7 +10,7 @@ namespace RoguelikeEngine.Core;
 /// <summary>
 /// MonoGame entry point. Owns the RenderPipeline and ECS World.
 /// </summary>
-public class Game1 : Game
+public class RL : Game
 {
     private readonly GraphicsDeviceManager _graphics;
     private RenderPipeline _renderPipeline;
@@ -18,7 +18,7 @@ public class Game1 : Game
     private TileMap _tileMap;
     private PlayerInputSystem _playerInputSystem;
 
-    public Game1()
+    public RL()
     {
         _graphics = new GraphicsDeviceManager(this);
         Content.RootDirectory = "Content";
@@ -27,6 +27,8 @@ public class Game1 : Game
 
         _graphics.PreferredBackBufferWidth = GameConfig.DefaultWindowWidth;
         _graphics.PreferredBackBufferHeight = GameConfig.DefaultWindowHeight;
+        _graphics.IsFullScreen = true;
+        _graphics.HardwareModeSwitch = false; // borderless fullscreen
     }
 
     protected override void Initialize()

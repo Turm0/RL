@@ -1,2 +1,2 @@
-using var game = new RoguelikeEngine.Core.Game1();
+using var game = new RoguelikeEngine.Core.RL();
 game.Run();
