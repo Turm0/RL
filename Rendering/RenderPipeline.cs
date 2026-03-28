@@ -1,19 +1,18 @@
-using DefaultEcs;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using RoguelikeEngine.Core;
-using RoguelikeEngine.ECS.Components;
 using RoguelikeEngine.World;
 
 namespace RoguelikeEngine.Rendering;
 
 /// <summary>
-/// Orchestrates all draw calls. Owns Camera and TerrainRenderer.
+/// Orchestrates all draw calls. Owns Camera, TerrainRenderer, and EntityRenderer.
 /// </summary>
 public class RenderPipeline
 {
     private Camera _camera;
     private TerrainRenderer _terrainRenderer;
+    private EntityRenderer _entityRenderer;
     private SpriteBatch _spriteBatch;
     private Texture2D _whitePixel;
     private GraphicsDevice _graphicsDevice;
@@ -41,6 +40,7 @@ public class RenderPipeline
         };
 
         _terrainRenderer = new TerrainRenderer();
+        _entityRenderer = new EntityRenderer(new VectorRasterizer(), new TextureCache());
 
         _window.ClientSizeChanged += OnClientSizeChanged;
     }
@@ -58,41 +58,19 @@ public class RenderPipeline
     }
 
     /// <summary>
-    /// Draws the world: terrain first, then entities.
+    /// Draws the world: terrain first, then entities (y-sorted).
     /// </summary>
     public void Draw(GameTime gameTime, TileMap map, DefaultEcs.World ecsWorld)
     {
         _graphicsDevice.Clear(Color.Black);
 
-        _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
+        _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
 
         // Draw terrain
         _terrainRenderer.Draw(_spriteBatch, _whitePixel, map, _camera);
 
-        // Draw entities with Position + Renderable
-        int tileSize = GameConfig.TileSize;
-        int entitySize = (int)(tileSize * 0.8f);
-        int offset = (tileSize - entitySize) / 2;
-
-        using var entitySet = ecsWorld.GetEntities()
-            .With<Position>()
-            .With<Renderable>()
-            .AsSet();
-
-        foreach (ref readonly var entity in entitySet.GetEntities())
-        {
-            ref readonly var pos = ref entity.Get<Position>();
-            ref readonly var renderable = ref entity.Get<Renderable>();
-
-            if (!_camera.IsInView(pos.TileX, pos.TileY, tileSize))
-                continue;
-
-            var worldPos = new Vector2(pos.TileX * tileSize + offset, pos.TileY * tileSize + offset);
-            var screenPos = _camera.WorldToScreen(worldPos);
-            var destRect = new Rectangle((int)screenPos.X, (int)screenPos.Y, entitySize, entitySize);
-
-            _spriteBatch.Draw(_whitePixel, destRect, renderable.Color);
-        }
+        // Draw entities (y-sorted, vector-rasterized)
+        _entityRenderer.Draw(_spriteBatch, _camera, ecsWorld, GameConfig.TileSize);
 
         _spriteBatch.End();
     }
