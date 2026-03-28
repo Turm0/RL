@@ -209,7 +209,9 @@ public class LightingSystem
 
                 float t = dist / radius;
                 if (t >= 1f) continue;
-                float falloff = 1f - t * t;
+                // Smooth S-curve: holds brightness near source, gentle fade at edges
+                float f = 1f - t * t;
+                float falloff = f * f;
 
                 int idx = (bufY * _bufferWidth + subX0 + sx) * 3;
                 _lightBuffer[idx + 0] += intensity * falloff * color.X * wallMult;
