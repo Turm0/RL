@@ -49,6 +49,9 @@ public class VectorRasterizer
             case "fire_elemental":
                 DrawFireElemental(image, cx, cy, scale);
                 break;
+            case "torch":
+                DrawTorch(image, cx, cy, scale);
+                break;
         }
 
         return ImageToTexture(image, device);
@@ -427,6 +430,46 @@ public class VectorRasterizer
             new(cx - radiusX * 0.6f * s, cy - radiusY * 0.3f * s)
         });
         ctx.Fill(color, flame);
+    }
+
+    private static void DrawTorch(Image<Rgba32> img, float cx, float cy, float s)
+    {
+        img.Mutate(ctx =>
+        {
+            // Stick
+            ctx.DrawLine(Color.FromRgba(100, 70, 40, 255), MathF.Max(2.5f * s, 1.5f),
+                new PointF[] { new(cx, cy + 2 * s), new(cx, cy + 10 * s) });
+
+            // Mount bracket
+            ctx.Fill(Color.FromRgba(80, 80, 80, 255), new EllipsePolygon(cx, cy + 2 * s, 2.5f * s, 1.5f * s));
+
+            // Flame outer: orange
+            var flameOuter = new Polygon(new PointF[]
+            {
+                new(cx, cy - 8 * s),
+                new(cx + 3 * s, cy - 3 * s),
+                new(cx + 2.5f * s, cy + 1 * s),
+                new(cx, cy + 2 * s),
+                new(cx - 2.5f * s, cy + 1 * s),
+                new(cx - 3 * s, cy - 3 * s)
+            });
+            ctx.Fill(Color.FromRgba(255, 140, 0, 220), flameOuter);
+
+            // Flame inner: yellow
+            var flameInner = new Polygon(new PointF[]
+            {
+                new(cx, cy - 5 * s),
+                new(cx + 1.5f * s, cy - 2 * s),
+                new(cx + 1.2f * s, cy + 0.5f * s),
+                new(cx, cy + 1.5f * s),
+                new(cx - 1.2f * s, cy + 0.5f * s),
+                new(cx - 1.5f * s, cy - 2 * s)
+            });
+            ctx.Fill(Color.FromRgba(255, 220, 80, 240), flameInner);
+
+            // Core: bright white-yellow
+            ctx.Fill(Color.FromRgba(255, 255, 200, 255), new EllipsePolygon(cx, cy - 1 * s, 1 * s, 1.5f * s));
+        });
     }
 
     private static Texture2D ImageToTexture(Image<Rgba32> image, GraphicsDevice device)

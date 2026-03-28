@@ -1,10 +1,10 @@
-using System;
 using System.Collections.Generic;
 using DefaultEcs;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using RoguelikeEngine.Core;
 using RoguelikeEngine.ECS.Components;
+using RoguelikeEngine.World;
 
 namespace RoguelikeEngine.Rendering;
 
@@ -25,19 +25,19 @@ public class EntityRenderer
     /// <summary>
     /// Draws all entities with Position + SpriteShape, sorted by Y then X.
     /// </summary>
-    public void Draw(SpriteBatch spriteBatch, Camera camera, DefaultEcs.World world, int tileSize)
+    public void Draw(SpriteBatch spriteBatch, Camera camera, DefaultEcs.World world, int tileSize, FogOfWar fow)
     {
         using var entitySet = world.GetEntities()
             .With<Position>()
             .With<SpriteShape>()
             .AsSet();
 
-        // Collect visible entities for sorting
+        // Collect entities that are in viewport AND currently visible in FOV
         var visible = new List<Entity>();
         foreach (ref readonly var entity in entitySet.GetEntities())
         {
             ref readonly var pos = ref entity.Get<Position>();
-            if (camera.IsInView(pos.TileX, pos.TileY, tileSize))
+            if (camera.IsInView(pos.TileX, pos.TileY, tileSize) && fow.IsVisible(pos.TileX, pos.TileY))
                 visible.Add(entity);
         }
 
