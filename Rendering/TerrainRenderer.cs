@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using RoguelikeEngine.Core;
@@ -7,25 +8,18 @@ using RoguelikeEngine.World;
 
 namespace RoguelikeEngine.Rendering;
 
-/// <summary>
-/// Draws the tile grid from a TileMap using colored rectangles.
-/// Memory tiles are drawn with base colors then darkened with a semi-transparent overlay.
-/// </summary>
 public class TerrainRenderer
 {
-    private static readonly Color FloorColor = new(55, 50, 44);
-    private static readonly Color WallColor = new(75, 70, 62);
-    private static readonly Color WaterColor = new(30, 50, 70);
-    private static readonly Color LavaColor = new(120, 40, 20);
-    private static readonly Color WallHighlightColor = new(95, 88, 78);
-    private const int HighlightHeight = 4;
+    private readonly TerrainTextureGenerator _generator = new();
+    private readonly TextureCache _terrainCache = new();
+    private readonly TextureCache _memoryCache = new();
 
-    /// <summary>
-    /// Draws all visible tiles from the map, respecting fog-of-war.
-    /// Unexplored = black. Memory = monochrome teal-gray. Visible = normal.
-    /// </summary>
-    public void Draw(SpriteBatch spriteBatch, Texture2D whitePixel, TileMap map,
-        Camera camera, FogOfWar fow)
+    // Animated tile frame caches: key → Texture2D[] (4 frames)
+    private readonly Dictionary<string, Texture2D[]> _animCache = new();
+    private const int AnimFrameCount = 4;
+    private const float AnimFps = 2f;
+
+    public void Draw(SpriteBatch spriteBatch, TileMap map, Camera camera, FogOfWar fow, float totalSeconds)
     {
         int tileSize = GameConfig.TileSize;
         var visibleRect = camera.GetVisibleTileRect(tileSize);
@@ -34,6 +28,8 @@ public class TerrainRenderer
         int startY = visibleRect.Y;
         int endX = startX + visibleRect.Width;
         int endY = startY + visibleRect.Height;
+
+        int animFrame = (int)(totalSeconds * AnimFps) % AnimFrameCount;
 
         for (int x = startX; x < endX; x++)
         {
@@ -47,51 +43,48 @@ public class TerrainRenderer
                 if (!explored) continue;
 
                 var tile = map.GetTile(x, y);
-                var color = GetTileColor(tile);
+                var neighbors = NeighborContext.FromMap(map, x, y);
+                string cacheKey = TerrainTextureGenerator.BuildCacheKey(tile, neighbors);
 
-                if (!visible)
-                    color = ToMemoryColor(color);
+                Texture2D texture;
 
-                var worldPos = new Vector2(x * tileSize, y * tileSize);
-                var screenPos = camera.WorldToScreen(worldPos);
-                int sx = (int)Math.Floor(screenPos.X);
-                int sy = (int)Math.Floor(screenPos.Y);
-                int sx2 = (int)Math.Floor(screenPos.X + tileSize);
-                int sy2 = (int)Math.Floor(screenPos.Y + tileSize);
-                var destRect = new Rectangle(sx, sy, sx2 - sx, sy2 - sy);
+                bool isAnimated = visible && !tile.HasWall &&
+                    (tile.Terrain == TerrainId.Water || tile.Terrain == TerrainId.DeepWater || tile.Terrain == TerrainId.Lava);
 
-                spriteBatch.Draw(whitePixel, destRect, color);
-
-                // Wall top highlight (visible tiles only)
-                if (visible && tile == TileType.Wall && map.IsInBounds(x, y + 1) && map.GetTile(x, y + 1) == TileType.Floor)
+                if (isAnimated)
                 {
-                    var highlightRect = new Rectangle(sx, sy2 - HighlightHeight, sx2 - sx, HighlightHeight);
-                    spriteBatch.Draw(whitePixel, highlightRect, WallHighlightColor);
+                    texture = GetAnimatedFrame(spriteBatch.GraphicsDevice, cacheKey, tile, neighbors, x, y, animFrame);
                 }
+                else if (visible)
+                {
+                    texture = _terrainCache.GetOrCreate(cacheKey, () =>
+                        _generator.Generate(spriteBatch.GraphicsDevice, tile, neighbors, x, y, null));
+                }
+                else
+                {
+                    string memKey = "mem_" + cacheKey;
+                    texture = _memoryCache.GetOrCreate(memKey, () =>
+                        _generator.GenerateMemory(spriteBatch.GraphicsDevice, tile, neighbors, x, y));
+                }
+
+                var destRect = camera.TileToScreenRect(x, y, tileSize);
+
+                spriteBatch.Draw(texture, destRect, Color.White);
             }
         }
     }
 
-    /// <summary>
-    /// Converts a tile color to monochrome muted teal-gray for memory tiles.
-    /// Walls remain brighter than floors within the single-hue palette.
-    /// </summary>
-    private static Color ToMemoryColor(Color color)
+    private Texture2D GetAnimatedFrame(GraphicsDevice device, string baseKey, TileData tile,
+        NeighborContext neighbors, int worldX, int worldY, int frame)
     {
-        float gray = color.R * 0.299f + color.G * 0.587f + color.B * 0.114f;
-        gray *= 0.6f;
-        return new Color(
-            (int)(gray * 0.6f),
-            (int)(gray * 0.8f),
-            (int)(gray * 0.75f));
+        if (!_animCache.TryGetValue(baseKey, out var frames))
+        {
+            frames = new Texture2D[AnimFrameCount];
+            for (int f = 0; f < AnimFrameCount; f++)
+                frames[f] = _generator.GenerateAnimated(device, tile, neighbors, worldX, worldY, null, f, AnimFrameCount);
+            _animCache[baseKey] = frames;
+        }
+        return frames[frame];
     }
 
-    private static Color GetTileColor(TileType type) => type switch
-    {
-        TileType.Floor => FloorColor,
-        TileType.Wall => WallColor,
-        TileType.Water => WaterColor,
-        TileType.Lava => LavaColor,
-        _ => Color.Magenta
-    };
 }

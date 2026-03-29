@@ -36,7 +36,9 @@ public class Camera
         var viewportCenter = new Vector2(ViewportWidth / 2f, ViewportHeight / 2f);
         var desired = targetPixel - viewportCenter;
 
-        Position = Vector2.Lerp(Position, desired, 8f * dt);
+        var lerped = Vector2.Lerp(Position, desired, 8f * dt);
+        // Snap to whole pixels to prevent tile seam artifacts
+        Position = new Vector2(MathF.Round(lerped.X), MathF.Round(lerped.Y));
     }
 
     /// <summary>Converts a world pixel position to screen position.</summary>
@@ -53,6 +55,13 @@ public class Camera
         int endY = (int)Math.Ceiling((Position.Y + ViewportHeight) / tileSize) + 1;
 
         return new Rectangle(startX, startY, endX - startX + 1, endY - startY + 1);
+    }
+
+    /// <summary>Returns the screen-space destination rectangle for a tile.</summary>
+    public Rectangle TileToScreenRect(int tileX, int tileY, int tileSize)
+    {
+        var screenPos = WorldToScreen(new Vector2(tileX * tileSize, tileY * tileSize));
+        return new Rectangle((int)screenPos.X, (int)screenPos.Y, tileSize, tileSize);
     }
 
     /// <summary>Returns true if the given tile is within the visible area.</summary>

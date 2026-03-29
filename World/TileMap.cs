@@ -1,103 +1,170 @@
+using System.Collections.Generic;
 using RoguelikeEngine.Data;
 
 namespace RoguelikeEngine.World;
 
-/// <summary>
-/// 2D grid of tiles representing the game world.
-/// </summary>
 public class TileMap
 {
-    private readonly TileType[,] _tiles;
+    private readonly TileData[,] _tiles;
+    private readonly List<TileEffect>[,] _effects;
+    private readonly bool[,] _objectBlocksMovement;
+    private readonly bool[,] _objectBlocksLight;
+    private readonly Dictionary<ushort, ZoneDefinition> _zones = new();
 
-    /// <summary>Width of the map in tiles.</summary>
     public int Width { get; }
-
-    /// <summary>Height of the map in tiles.</summary>
     public int Height { get; }
 
     public TileMap(int width, int height)
     {
         Width = width;
         Height = height;
-        _tiles = new TileType[width, height];
+        _tiles = new TileData[width, height];
+        _effects = new List<TileEffect>[width, height];
+        _objectBlocksMovement = new bool[width, height];
+        _objectBlocksLight = new bool[width, height];
     }
 
-    /// <summary>Gets the tile type at the given coordinates.</summary>
-    public TileType GetTile(int x, int y)
+    public TileData GetTile(int x, int y)
     {
-        return IsInBounds(x, y) ? _tiles[x, y] : TileType.Wall;
+        if (!IsInBounds(x, y))
+            return new TileData(TerrainId.Stone, WallType.StoneWall);
+        return _tiles[x, y];
     }
 
-    /// <summary>Sets the tile type at the given coordinates.</summary>
-    public void SetTile(int x, int y, TileType type)
+    public ref TileData GetTileRef(int x, int y) => ref _tiles[x, y];
+
+    public void SetTile(int x, int y, TileData data)
     {
         if (IsInBounds(x, y))
-            _tiles[x, y] = type;
+            _tiles[x, y] = data;
     }
 
-    /// <summary>Returns true if the coordinates are within map bounds.</summary>
     public bool IsInBounds(int x, int y)
     {
         return x >= 0 && x < Width && y >= 0 && y < Height;
     }
 
-    /// <summary>Returns true if the tile at the given position can be walked on (Floor or Water).</summary>
+    public bool HasWall(int x, int y)
+    {
+        return GetTile(x, y).HasWall;
+    }
+
     public bool IsWalkable(int x, int y)
     {
         if (!IsInBounds(x, y)) return false;
         var tile = _tiles[x, y];
-        return tile == TileType.Floor || tile == TileType.Water;
+        if (tile.HasWall) return false;
+        if (!TerrainRegistry.Get(tile.Terrain).Walkable) return false;
+        if (_objectBlocksMovement[x, y]) return false;
+        return true;
     }
 
-    /// <summary>Creates the hardcoded test dungeon for Phase 1.</summary>
-    public static TileMap CreateTestDungeon()
+    public bool BlocksLight(int x, int y)
     {
-        var map = new TileMap(50, 40);
+        if (!IsInBounds(x, y)) return true;
+        if (_tiles[x, y].HasWall) return true;
+        if (_objectBlocksLight[x, y]) return true;
+        return false;
+    }
 
-        // Fill everything with walls
-        for (int x = 0; x < map.Width; x++)
-            for (int y = 0; y < map.Height; y++)
-                map.SetTile(x, y, TileType.Wall);
+    /// <summary>
+    /// Same as BlocksLight, but also treats tiles inside roofed zones
+    /// that the viewer is NOT in as opaque. This prevents FOV and light
+    /// from leaking through doors of roofed buildings.
+    /// </summary>
+    public bool BlocksLightForViewer(int x, int y, ushort viewerZoneId)
+    {
+        if (BlocksLight(x, y)) return true;
 
-        // Helper to carve a rectangular room of floor tiles
-        static void CarveRoom(TileMap m, int x1, int y1, int x2, int y2, TileType type = TileType.Floor)
+        if (!IsInBounds(x, y)) return false;
+        ushort tileZone = _tiles[x, y].ZoneId;
+        if (tileZone == 0 || tileZone == viewerZoneId) return false;
+
+        var zone = GetZone(tileZone);
+        return zone != null && zone.HasRoof;
+    }
+
+    // --- Effects ---
+
+    public IReadOnlyList<TileEffect> GetEffects(int x, int y)
+    {
+        if (!IsInBounds(x, y) || _effects[x, y] == null)
+            return System.Array.Empty<TileEffect>();
+        return _effects[x, y];
+    }
+
+    public float GetEffectIntensity(int x, int y, TerrainEffectType type)
+    {
+        if (!IsInBounds(x, y) || _effects[x, y] == null) return 0f;
+        foreach (var e in _effects[x, y])
+            if (e.Type == type) return e.Intensity;
+        return 0f;
+    }
+
+    public void SetEffect(int x, int y, TerrainEffectType type, float intensity)
+    {
+        if (!IsInBounds(x, y)) return;
+
+        _effects[x, y] ??= new List<TileEffect>(2);
+        var list = _effects[x, y];
+
+        for (int i = 0; i < list.Count; i++)
         {
-            for (int x = x1; x <= x2; x++)
-                for (int y = y1; y <= y2; y++)
-                    m.SetTile(x, y, type);
+            if (list[i].Type == type)
+            {
+                if (intensity <= 0f)
+                    list.RemoveAt(i);
+                else
+                    list[i] = new TileEffect(type, intensity);
+                return;
+            }
         }
 
-        // Room 1: (3,3) to (12,9)
-        CarveRoom(map, 3, 3, 12, 9);
+        if (intensity > 0f)
+            list.Add(new TileEffect(type, intensity));
+    }
 
-        // Room 2: (16,3) to (26,11)
-        CarveRoom(map, 16, 3, 26, 11);
+    // --- Object occupancy ---
 
-        // Room 3: (3,14) to (13,22)
-        CarveRoom(map, 3, 14, 13, 22);
+    public void SetObjectBlocking(int x, int y, bool blocksMovement, bool blocksLight)
+    {
+        if (!IsInBounds(x, y)) return;
+        _objectBlocksMovement[x, y] = blocksMovement;
+        _objectBlocksLight[x, y] = blocksLight;
+    }
 
-        // Room 4: (18,15) to (28,23)
-        CarveRoom(map, 18, 15, 28, 23);
+    public void ClearObjectBlocking(int x, int y)
+    {
+        if (!IsInBounds(x, y)) return;
+        _objectBlocksMovement[x, y] = false;
+        _objectBlocksLight[x, y] = false;
+    }
 
-        // Corridor: room 1 to room 2 — horizontal at y=6 from x=13 to x=15
-        CarveRoom(map, 13, 6, 15, 6);
+    // --- Zones ---
 
-        // Corridor: room 1 to room 3 — vertical at x=7 from y=10 to y=13
-        CarveRoom(map, 7, 10, 7, 13);
+    public void RegisterZone(ZoneDefinition zone) => _zones[zone.Id] = zone;
 
-        // Corridor: room 2 to room 4 — vertical at x=22 from y=12 to y=14
-        CarveRoom(map, 22, 12, 22, 14);
+    public ZoneDefinition GetZone(ushort zoneId)
+    {
+        _zones.TryGetValue(zoneId, out var zone);
+        return zone;
+    }
 
-        // Corridor: room 3 to room 4 — horizontal at y=18 from x=14 to x=17
-        CarveRoom(map, 14, 18, 17, 18);
+    public IEnumerable<ZoneDefinition> GetAllZones() => _zones.Values;
 
-        // Water tiles in room 3: (5,17) to (8,20)
-        CarveRoom(map, 5, 17, 8, 20, TileType.Water);
+    public ushort GetZoneId(int x, int y)
+    {
+        if (!IsInBounds(x, y)) return 0;
+        return _tiles[x, y].ZoneId;
+    }
 
-        // Wall pillars in room 2
-        map.SetTile(19, 6, TileType.Wall);
-        map.SetTile(23, 8, TileType.Wall);
+    // --- Variant seed helper ---
 
-        return map;
+    public static ushort ComputeVariantSeed(int x, int y, int mapSeed = 12345)
+    {
+        int h = x * 374761393 + y * 668265263 + mapSeed;
+        h = (h ^ (h >> 13)) * 1274126177;
+        h ^= h >> 16;
+        return (ushort)(h & 0xFFFF);
     }
 }

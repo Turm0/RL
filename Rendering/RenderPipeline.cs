@@ -6,40 +6,30 @@ using RoguelikeEngine.World;
 
 namespace RoguelikeEngine.Rendering;
 
-/// <summary>
-/// Orchestrates all draw calls. Owns Camera, TerrainRenderer, EntityRenderer, LightingSystem, and FogOfWar.
-/// </summary>
 public class RenderPipeline
 {
     private Camera _camera;
     private TerrainRenderer _terrainRenderer;
     private EntityRenderer _entityRenderer;
+    private RoofRenderer _roofRenderer;
+    private EffectOverlayRenderer _effectOverlayRenderer;
     private LightingSystem _lightingSystem;
     private FogOfWar _fogOfWar;
     private SpriteBatch _spriteBatch;
-    private Texture2D _whitePixel;
     private GraphicsDevice _graphicsDevice;
     private GameWindow _window;
 
     private const int FovRadius = 30;
 
-    /// <summary>The camera used for viewport transformations.</summary>
     public Camera Camera => _camera;
-
-    /// <summary>The fog-of-war state, accessible for minimap and other systems.</summary>
     public FogOfWar FogOfWar => _fogOfWar;
+    public EffectOverlayRenderer EffectOverlay => _effectOverlayRenderer;
 
-    /// <summary>
-    /// Initializes the render pipeline, creating shared resources.
-    /// </summary>
     public void Initialize(GraphicsDevice graphicsDevice, GameWindow window, TileMap map)
     {
         _graphicsDevice = graphicsDevice;
         _window = window;
         _spriteBatch = new SpriteBatch(graphicsDevice);
-
-        _whitePixel = new Texture2D(graphicsDevice, 1, 1);
-        _whitePixel.SetData(new[] { Color.White });
 
         _camera = new Camera
         {
@@ -49,6 +39,8 @@ public class RenderPipeline
 
         _terrainRenderer = new TerrainRenderer();
         _entityRenderer = new EntityRenderer(new VectorRasterizer(), new TextureCache());
+        _roofRenderer = new RoofRenderer();
+        _effectOverlayRenderer = new EffectOverlayRenderer();
         _lightingSystem = new LightingSystem();
         _fogOfWar = new FogOfWar(map.Width, map.Height);
 
@@ -61,34 +53,46 @@ public class RenderPipeline
         _camera.ViewportHeight = _graphicsDevice.Viewport.Height;
     }
 
-    /// <summary>Updates the camera each frame.</summary>
     public void Update(GameTime gameTime)
     {
         _camera.Update(gameTime);
     }
 
-    /// <summary>
-    /// Recomputes the player FOV from the given tile position.
-    /// </summary>
     public void UpdateFov(int playerTileX, int playerTileY, TileMap map)
     {
-        _fogOfWar.Compute(playerTileX, playerTileY, FovRadius, map);
+        ushort playerZoneId = map.GetZoneId(playerTileX, playerTileY);
+        _fogOfWar.Compute(playerTileX, playerTileY, FovRadius, map, playerZoneId);
     }
 
-    /// <summary>
-    /// Draws the world: terrain, entities, then lighting overlay.
-    /// </summary>
     public void Draw(GameTime gameTime, TileMap map, DefaultEcs.World ecsWorld)
     {
         int tileSize = GameConfig.TileSize;
         var visibleRect = _camera.GetVisibleTileRect(tileSize);
         float time = (float)gameTime.TotalGameTime.TotalSeconds;
 
+        // Get player zone for roof logic
+        ushort playerZoneId = 0;
+        using (var players = ecsWorld.GetEntities()
+            .With<PlayerControlled>()
+            .With<Position>()
+            .AsSet())
+        {
+            foreach (ref readonly var entity in players.GetEntities())
+            {
+                ref readonly var pos = ref entity.Get<Position>();
+                playerZoneId = map.GetZoneId(pos.TileX, pos.TileY);
+                break;
+            }
+        }
+
+        // Update roof fade
+        _roofRenderer.Update(gameTime, map, playerZoneId);
+
         // Compute lighting
         _lightingSystem.Resize(visibleRect.Width, visibleRect.Height, _graphicsDevice);
         _lightingSystem.BeginFrame(visibleRect);
+        _lightingSystem.SetViewerZone(playerZoneId);
 
-        // Gather all light emitters — only add lights for tiles currently in player FOV
         using var lights = ecsWorld.GetEntities()
             .With<Position>()
             .With<LightEmitter>()
@@ -100,7 +104,6 @@ public class RenderPipeline
             ref readonly var pos = ref entity.Get<Position>();
             ref readonly var light = ref entity.Get<LightEmitter>();
 
-            // Skip lights outside the visible rect
             if (pos.TileX + (int)light.Radius < visibleRect.X ||
                 pos.TileX - (int)light.Radius >= visibleRect.X + visibleRect.Width ||
                 pos.TileY + (int)light.Radius < visibleRect.Y ||
@@ -120,12 +123,24 @@ public class RenderPipeline
         // Draw scene
         _graphicsDevice.Clear(Color.Black);
 
+        // 1. Terrain + entities
         _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
-        _terrainRenderer.Draw(_spriteBatch, _whitePixel, map, _camera, _fogOfWar);
-        _entityRenderer.Draw(_spriteBatch, _camera, ecsWorld, tileSize, _fogOfWar);
+        _terrainRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar, time);
+        _entityRenderer.Draw(_spriteBatch, _camera, ecsWorld, tileSize, _fogOfWar,
+            (tx, ty) => _roofRenderer.IsHiddenByRoof(map, tx, ty, playerZoneId));
         _spriteBatch.End();
 
-        // Composite lighting overlay
+        // 2. Lighting overlay (multiply blend)
         _lightingSystem.Draw(_spriteBatch, _camera, tileSize);
+
+        // 3. Effect overlays AFTER lighting — snow/wet/etc covers everything on the tile
+        _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
+        _effectOverlayRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar, time);
+        _spriteBatch.End();
+
+        // 4. Roofs on top of everything
+        _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
+        _roofRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar);
+        _spriteBatch.End();
     }
 }
