@@ -6,6 +6,7 @@
     <RollForward>Major</RollForward>
     <PublishReadyToRun>false</PublishReadyToRun>
     <TieredCompilation>false</TieredCompilation>
+    <DefaultItemExcludes>$(DefaultItemExcludes);BodyGenerator\**</DefaultItemExcludes>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -29,5 +30,8 @@
     <PackageReference Include="MonoGame.Content.Builder.Task" Version="3.8.*" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
     <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.7" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="BodyGenerator\BodyGenerator.csproj" />
   </ItemGroup>
 </Project>

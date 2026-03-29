@@ -1,0 +1,20 @@
+name: idle
+root_position: [12, 7]
+
+draw_order:
+  - upper_arm_left
+  - lower_arm_left
+  - hand_left
+  - upper_arm_right
+  - lower_arm_right
+  - hand_right
+  - upper_leg_left
+  - lower_leg_left
+  - foot_left
+  - upper_leg_right
+  - lower_leg_right
+  - foot_right
+  - torso
+  - head
+
+joint_offsets: {}

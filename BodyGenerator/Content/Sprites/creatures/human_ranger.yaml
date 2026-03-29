@@ -1,0 +1,17 @@
+name: Human Ranger
+body_template: humanoid
+pose: idle
+
+palette:
+  skin_base: "#E8B878"
+  skin_shadow: "#C89458"
+  skin_highlight: "#F4D4A0"
+  cloth_base: "#2A6A2A"
+  cloth_shadow: "#1A4A1A"
+  cloth_highlight: "#3A8A3A"
+  leg_base: "#6A5A3A"
+  leg_shadow: "#4A3A2A"
+  belt: "#8B6914"
+  boot: "#4A3A2A"
+  eye: "#000000"
+  outline: "#1A1A2A"

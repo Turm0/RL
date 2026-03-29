@@ -1,0 +1,17 @@
+name: Undead
+body_template: humanoid
+pose: idle
+
+palette:
+  skin_base: "#A0A0A0"
+  skin_shadow: "#707070"
+  skin_highlight: "#C0C0C0"
+  cloth_base: "#4A4A3A"
+  cloth_shadow: "#2A2A1A"
+  cloth_highlight: "#5A5A4A"
+  leg_base: "#3A3A2A"
+  leg_shadow: "#2A2A1A"
+  belt: "#4A4A3A"
+  boot: "#2A2A1A"
+  eye: "#40FF40"
+  outline: "#1A1A1A"

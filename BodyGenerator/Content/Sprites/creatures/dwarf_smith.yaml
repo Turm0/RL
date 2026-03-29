@@ -1,0 +1,17 @@
+name: Dwarf Smith
+body_template: humanoid
+pose: idle
+
+palette:
+  skin_base: "#D8A070"
+  skin_shadow: "#B88050"
+  skin_highlight: "#F0C090"
+  cloth_base: "#8A4A1A"
+  cloth_shadow: "#5A3A0A"
+  cloth_highlight: "#AA6A3A"
+  leg_base: "#5A4A3A"
+  leg_shadow: "#3A2A1A"
+  belt: "#C8C8C8"
+  boot: "#4A4A4A"
+  eye: "#000000"
+  outline: "#1A1A1A"

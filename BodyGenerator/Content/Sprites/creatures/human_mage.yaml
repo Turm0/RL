@@ -1,0 +1,17 @@
+name: Human Mage
+body_template: humanoid
+pose: idle
+
+palette:
+  skin_base: "#E8C8A0"
+  skin_shadow: "#C8A880"
+  skin_highlight: "#F8E0C0"
+  cloth_base: "#4A2A8A"
+  cloth_shadow: "#2A1A5A"
+  cloth_highlight: "#6A4AAA"
+  leg_base: "#4A2A8A"
+  leg_shadow: "#2A1A5A"
+  belt: "#C8A030"
+  boot: "#3A2A1A"
+  eye: "#000000"
+  outline: "#1A1A2A"

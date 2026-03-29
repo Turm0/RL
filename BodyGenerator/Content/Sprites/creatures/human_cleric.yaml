@@ -1,0 +1,17 @@
+name: Human Cleric
+body_template: humanoid
+pose: idle
+
+palette:
+  skin_base: "#C08858"
+  skin_shadow: "#A07040"
+  skin_highlight: "#E0A878"
+  cloth_base: "#E8E0D0"
+  cloth_shadow: "#C8C0B0"
+  cloth_highlight: "#F8F0E8"
+  leg_base: "#E8E0D0"
+  leg_shadow: "#C8C0B0"
+  belt: "#C8A030"
+  boot: "#6A5A3A"
+  eye: "#000000"
+  outline: "#2A2A3A"

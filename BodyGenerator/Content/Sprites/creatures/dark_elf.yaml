@@ -1,0 +1,17 @@
+name: Dark Elf
+body_template: humanoid
+pose: idle
+
+palette:
+  skin_base: "#7A6A9A"
+  skin_shadow: "#5A4A7A"
+  skin_highlight: "#9A8ABA"
+  cloth_base: "#8A1A2A"
+  cloth_shadow: "#5A0A1A"
+  cloth_highlight: "#AA3A4A"
+  leg_base: "#2A2A3A"
+  leg_shadow: "#1A1A2A"
+  belt: "#C0C0C0"
+  boot: "#1A1A2A"
+  eye: "#FF3030"
+  outline: "#0A0A1A"

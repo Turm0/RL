@@ -1,0 +1,17 @@
+name: Human Thief
+body_template: humanoid
+pose: idle
+
+palette:
+  skin_base: "#D0A068"
+  skin_shadow: "#B08048"
+  skin_highlight: "#E8C088"
+  cloth_base: "#2A2A2A"
+  cloth_shadow: "#1A1A1A"
+  cloth_highlight: "#4A4A4A"
+  leg_base: "#3A3A3A"
+  leg_shadow: "#2A2A2A"
+  belt: "#5A4A2A"
+  boot: "#1A1A1A"
+  eye: "#000000"
+  outline: "#0A0A1A"
