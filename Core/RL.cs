@@ -44,29 +44,27 @@ public class RL : Game
         // Player with carried light
         var player = _ecsWorld.CreateEntity();
         player.Set(new Position(5, 5));
-        player.Set(new SpriteShape("player", 1.0f));
+        player.Set(new SpriteShape("creatures/human_ranger.yaml", 1.0f));
         player.Set(new PlayerControlled());
         player.Set(new LightEmitter(8f, 1.0f, new Vector3(1.2f, 1.1f, 0.9f), true, 0.15f));
 
-        // Goblins in Room 2
-        SpawnCreature(18, 5, "goblin", 0.7f);
-        SpawnCreature(22, 9, "goblin", 0.7f);
+        // Room 2 — mage and knight
+        SpawnCreature(18, 5, "creatures/human_mage.yaml", 1.0f);
+        SpawnCreature(22, 9, "creatures/human_knight.yaml", 1.0f);
 
-        // Rats in Room 3
-        SpawnCreature(5, 16, "rat", 0.45f);
-        SpawnCreature(9, 20, "rat", 0.45f);
+        // Room 3 — thief and cleric
+        SpawnCreature(5, 16, "creatures/human_thief.yaml", 1.0f);
+        SpawnCreature(9, 20, "creatures/human_cleric.yaml", 1.0f);
 
-        // Skeleton in Room 4
-        SpawnCreature(22, 18, "skeleton", 0.85f);
+        // Room 4 — orc and dark elf
+        SpawnCreature(22, 18, "creatures/orc_warrior.yaml", 1.0f);
+        SpawnCreature(25, 20, "creatures/dark_elf.yaml", 1.0f);
 
-        // Dragon in Room 4
-        SpawnCreature(25, 20, "dragon", 1.4f);
+        // Corridor — undead
+        SpawnCreature(14, 6, "creatures/undead.yaml", 1.0f);
 
-        // Ghost in corridor
-        SpawnCreature(14, 6, "ghost", 0.9f);
-
-        // Fire Elemental in Room 2
-        SpawnCreature(20, 7, "fire_elemental", 1.0f);
+        // Room 2 — dwarf smith
+        SpawnCreature(20, 7, "creatures/dwarf_smith.yaml", 1.0f);
 
         // One torch per room
         SpawnTorch(7, 6);    // Room 1 center

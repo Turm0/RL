@@ -34,4 +34,9 @@
   <ItemGroup>
     <ProjectReference Include="BodyGenerator\BodyGenerator.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="BodyGenerator\Content\Sprites\**\*.yaml" Link="Content\Sprites\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>

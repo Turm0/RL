@@ -39,6 +39,7 @@ public class SpriteGenerator
             OutlinePass.Apply(buffer, outlineColor);
         }
 
+        buffer.CenterContent();
         return buffer.ToTexture2D(device);
     }
 }
