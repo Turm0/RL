@@ -146,14 +146,23 @@ public class LightingSystem
     /// <summary>
     /// Applies a 3x3 box blur to the light buffer to soften shadow edges.
     /// </summary>
-    public void BlurBuffer()
+    public void BlurBuffer(TileMap map)
     {
         var temp = new float[_lightBuffer.Length];
+        Array.Copy(_lightBuffer, temp, _lightBuffer.Length);
 
         for (int y = 0; y < _bufferHeight; y++)
         {
             for (int x = 0; x < _bufferWidth; x++)
             {
+                // Map this sub-pixel back to tile coordinates
+                int tileX = _visibleRect.X + x / SubTileRes;
+                int tileY = _visibleRect.Y + y / SubTileRes;
+
+                // Skip blur for pixels on or adjacent to walls
+                if (map.BlocksLight(tileX, tileY))
+                    continue;
+
                 float r = 0, g = 0, b = 0;
                 int count = 0;
 
@@ -165,6 +174,12 @@ public class LightingSystem
                     {
                         int nx = x + dx;
                         if (nx < 0 || nx >= _bufferWidth) continue;
+
+                        // Only average with non-wall pixels
+                        int nTileX = _visibleRect.X + nx / SubTileRes;
+                        int nTileY = _visibleRect.Y + ny / SubTileRes;
+                        if (map.BlocksLight(nTileX, nTileY)) continue;
+
                         int idx = (ny * _bufferWidth + nx) * 3;
                         r += _lightBuffer[idx];
                         g += _lightBuffer[idx + 1];
@@ -173,10 +188,13 @@ public class LightingSystem
                     }
                 }
 
-                int outIdx = (y * _bufferWidth + x) * 3;
-                temp[outIdx] = r / count;
-                temp[outIdx + 1] = g / count;
-                temp[outIdx + 2] = b / count;
+                if (count > 0)
+                {
+                    int outIdx = (y * _bufferWidth + x) * 3;
+                    temp[outIdx] = r / count;
+                    temp[outIdx + 1] = g / count;
+                    temp[outIdx + 2] = b / count;
+                }
             }
         }
 

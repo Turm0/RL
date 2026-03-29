@@ -55,9 +55,16 @@ public class PlayerInputSystem
 
                 if (_map.IsWalkable(newX, newY))
                 {
+                    int oldX = pos.TileX, oldY = pos.TileY;
                     pos.TileX = newX;
                     pos.TileY = newY;
                     _camera.TargetTile = new Point(newX, newY);
+
+                    if (entity.Has<MovementAnimation>())
+                    {
+                        ref var anim = ref entity.Get<MovementAnimation>();
+                        anim.StartMove(oldX, oldY);
+                    }
                 }
             }
         }

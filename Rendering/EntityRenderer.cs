@@ -29,7 +29,7 @@ public class EntityRenderer
     }
 
     public void Draw(SpriteBatch spriteBatch, Camera camera, DefaultEcs.World world,
-        int tileSize, FogOfWar fow, Func<int, int, bool> isHiddenByRoof = null)
+        int tileSize, FogOfWar fow, float deltaTime, Func<int, int, bool> isHiddenByRoof = null)
     {
         using var entitySet = world.GetEntities()
             .With<Position>()
@@ -83,20 +83,61 @@ public class EntityRenderer
                 return _rasterizer.RasterizeCreature(creatureType, size, tileSize, spriteBatch.GraphicsDevice);
             });
 
+            // Compute world position with movement animation offset
+            float worldPixelX = pos.TileX * tileSize;
+            float worldPixelY = pos.TileY * tileSize;
+            float yOffset = 0f;
+
+            if (entity.Has<MovementAnimation>())
+            {
+                ref var anim = ref entity.Get<MovementAnimation>();
+                if (anim.Moving)
+                {
+                    anim.Progress += anim.Speed * deltaTime;
+                    if (anim.Progress >= 1f)
+                    {
+                        anim.Progress = 1f;
+                        anim.Moving = false;
+                    }
+
+                    float t = anim.Progress;
+
+                    switch (anim.Type)
+                    {
+                        case MoveAnimType.Slide:
+                            // Smooth lerp from old to new position
+                            float st = t * t * (3f - 2f * t); // smoothstep
+                            worldPixelX = anim.FromX * tileSize + (pos.TileX * tileSize - anim.FromX * tileSize) * st;
+                            worldPixelY = anim.FromY * tileSize + (pos.TileY * tileSize - anim.FromY * tileSize) * st;
+                            break;
+
+                        case MoveAnimType.Hop:
+                            // Slide + vertical arc
+                            float ht = t * t * (3f - 2f * t);
+                            worldPixelX = anim.FromX * tileSize + (pos.TileX * tileSize - anim.FromX * tileSize) * ht;
+                            worldPixelY = anim.FromY * tileSize + (pos.TileY * tileSize - anim.FromY * tileSize) * ht;
+                            yOffset = -MathF.Sin(t * MathF.PI) * tileSize * 0.3f;
+                            break;
+
+                        case MoveAnimType.Bob:
+                            // Instant position, subtle vertical bob
+                            yOffset = -MathF.Sin(t * MathF.PI) * tileSize * 0.12f;
+                            break;
+                    }
+                }
+            }
+
             Rectangle destRect;
 
             if (creatureType.EndsWith(".yaml") || entity.Has<TerrainObject>() || entity.Has<GroundItem>())
             {
-                var tileOrigin = new Vector2(pos.TileX * tileSize, pos.TileY * tileSize);
-                var screenPos = camera.WorldToScreen(tileOrigin);
+                var screenPos = camera.WorldToScreen(new Vector2(worldPixelX, worldPixelY + yOffset));
                 destRect = new Rectangle((int)screenPos.X, (int)screenPos.Y, tileSize, tileSize);
             }
             else
             {
-                var tileCenter = new Vector2(
-                    pos.TileX * tileSize + tileSize / 2f,
-                    pos.TileY * tileSize + tileSize / 2f);
-                var screenPos = camera.WorldToScreen(tileCenter);
+                var screenPos = camera.WorldToScreen(new Vector2(
+                    worldPixelX + tileSize / 2f, worldPixelY + tileSize / 2f + yOffset));
                 destRect = new Rectangle(
                     (int)(screenPos.X - texture.Width / 2f),
                     (int)(screenPos.Y - texture.Height / 2f),

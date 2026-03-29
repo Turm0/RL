@@ -136,7 +136,7 @@ public class RenderPipeline
             }
         }
 
-        _lightingSystem.BlurBuffer();
+        _lightingSystem.BlurBuffer(map);
         _lightingSystem.BuildTexture(_graphicsDevice, _fogOfWar);
 
         // Draw scene
@@ -145,7 +145,8 @@ public class RenderPipeline
         // 1. Terrain + entities
         _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
         _terrainRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar, time);
-        _entityRenderer.Draw(_spriteBatch, _camera, ecsWorld, tileSize, _fogOfWar,
+        float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
+        _entityRenderer.Draw(_spriteBatch, _camera, ecsWorld, tileSize, _fogOfWar, dt,
             (tx, ty) => _roofRenderer.IsHiddenByRoof(map, tx, ty, playerZoneId));
         _spriteBatch.End();
 
@@ -166,7 +167,20 @@ public class RenderPipeline
         if (_font != null)
         {
             _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
-            string text = $"Light: {_lightingSystem.CurrentAmbientName} [L]";
+            // Get player move anim type
+            string moveType = "None";
+            using (var players = ecsWorld.GetEntities()
+                .With<PlayerControlled>()
+                .With<MovementAnimation>()
+                .AsSet())
+            {
+                foreach (ref readonly var e in players.GetEntities())
+                {
+                    moveType = e.Get<MovementAnimation>().Type.ToString();
+                    break;
+                }
+            }
+            string text = $"Light: {_lightingSystem.CurrentAmbientName} [L]  Move: {moveType} [M]";
             _spriteBatch.DrawString(_font, text, new Vector2(12, 12), Color.Black);
             _spriteBatch.DrawString(_font, text, new Vector2(10, 10), Color.White);
             _spriteBatch.End();

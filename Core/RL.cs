@@ -69,6 +69,7 @@ public class RL : Game
         player.Set(new PlayerControlled());
         player.Set(new RenderLayer(RenderLayer.CreatureLayer));
         player.Set(new LightEmitter(10f, 1.0f, new Vector3(1.2f, 1.1f, 0.9f), true, 0.15f));
+        player.Set(new MovementAnimation(8f, MoveAnimType.Slide));
 
         // --- Outdoor NPCs ---
         SpawnCreature(20, 17, "creatures/human_mage.yaml");
@@ -351,6 +352,10 @@ public class RL : Game
         if (kb.IsKeyDown(Keys.L) && !_prevKeyboard.IsKeyDown(Keys.L))
             _renderPipeline.Lighting.CycleAmbient();
 
+        // M key: cycle movement animation mode
+        if (kb.IsKeyDown(Keys.M) && !_prevKeyboard.IsKeyDown(Keys.M))
+            CycleMoveAnim();
+
         _playerInputSystem.Update(gameTime);
         _renderPipeline.Update(gameTime);
         _weatherSystem?.Update(gameTime);
@@ -358,6 +363,20 @@ public class RL : Game
 
         _prevKeyboard = kb;
         base.Update(gameTime);
+    }
+
+    private void CycleMoveAnim()
+    {
+        using var players = _ecsWorld.GetEntities()
+            .With<PlayerControlled>()
+            .With<MovementAnimation>()
+            .AsSet();
+
+        foreach (ref readonly var entity in players.GetEntities())
+        {
+            ref var anim = ref entity.Get<MovementAnimation>();
+            anim.Type = (MoveAnimType)(((int)anim.Type + 1) % 4);
+        }
     }
 
     private void UpdatePlayerFov()
