@@ -76,9 +76,9 @@ public static class TerrainRegistry
             Id = TerrainId.Water,
             Name = "Water",
             Walkable = true,
-            BaseColor = new Color(30, 50, 70),
-            VariantColorMin = new Color(25, 42, 62),
-            VariantColorMax = new Color(38, 58, 80),
+            BaseColor = new Color(32, 55, 82),
+            VariantColorMin = new Color(22, 40, 65),
+            VariantColorMax = new Color(45, 70, 100),
             NoiseFrequency = 0.12f,
             NoiseAmplitude = 0.25f,
             Pattern = TerrainPattern.Ripple,
@@ -113,7 +113,12 @@ public static class TerrainRegistry
             NoiseAmplitude = 0.30f,
             Pattern = TerrainPattern.Ripple,
             TransitionPriority = 70,
-            PixelSize = 2
+            PixelSize = 2,
+            LightRadius = 5f,
+            LightIntensity = 1.2f,
+            LightColor = new Vector3(1.4f, 0.5f, 0.15f),
+            LightFlicker = true,
+            LightFlickerIntensity = 0.35f
         });
 
         Register(new TerrainDefinition

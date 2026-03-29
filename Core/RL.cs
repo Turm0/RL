@@ -94,6 +94,7 @@ public class RL : Game
         SpawnTorch(40, 10);  // Deep cave
         SpawnTorch(30, 28);  // Tavern
         SpawnTorch(33, 32);  // Tavern back
+
     }
 
     private DefaultEcs.Entity SpawnCreature(int x, int y, string creatureType, float size = 1.0f)
@@ -160,13 +161,10 @@ public class RL : Game
         for (int y = 1; y < H - 1; y++)
             SetFloor(map, 16, y, TerrainId.Dirt);
 
-        // Pond (water with deep water center)
+        // Pond — just Water tiles, depth computed automatically
         for (int x = 6; x <= 10; x++)
             for (int y = 17; y <= 21; y++)
                 SetFloor(map, x, y, TerrainId.Water);
-        for (int x = 7; x <= 9; x++)
-            for (int y = 18; y <= 20; y++)
-                SetFloor(map, x, y, TerrainId.DeepWater);
 
         // Sandy beach around pond
         for (int x = 5; x <= 11; x++)
@@ -321,6 +319,9 @@ public class RL : Game
             SetFloor(map, x, 29, TerrainId.Grass);
             SetFloor(map, x, 38, TerrainId.Grass);
         }
+
+        // Compute water depth from distance to shore
+        map.ComputeWaterDepth();
 
         return map;
     }

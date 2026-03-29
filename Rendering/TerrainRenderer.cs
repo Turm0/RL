@@ -10,14 +10,20 @@ namespace RoguelikeEngine.Rendering;
 
 public class TerrainRenderer
 {
-    private readonly TerrainTextureGenerator _generator = new();
+    private readonly TerrainTextureGenerator _generator;
     private readonly TextureCache _terrainCache = new();
     private readonly TextureCache _memoryCache = new();
 
+    public TerrainRenderer(TileMap map)
+    {
+        _generator = new TerrainTextureGenerator();
+        _generator.SetMap(map);
+    }
+
     // Animated tile frame caches: key → Texture2D[] (4 frames)
     private readonly Dictionary<string, Texture2D[]> _animCache = new();
-    private const int AnimFrameCount = 4;
-    private const float AnimFps = 2f;
+    private const int AnimFrameCount = 8;
+    private const float AnimFps = 1.5f;
 
     public void Draw(SpriteBatch spriteBatch, TileMap map, Camera camera, FogOfWar fow, float totalSeconds)
     {
@@ -48,8 +54,7 @@ public class TerrainRenderer
 
                 Texture2D texture;
 
-                bool isAnimated = visible && !tile.HasWall &&
-                    (tile.Terrain == TerrainId.Water || tile.Terrain == TerrainId.DeepWater || tile.Terrain == TerrainId.Lava);
+                bool isAnimated = visible && TerrainTextureGenerator.IsLiquid(tile.Terrain);
 
                 if (isAnimated)
                 {

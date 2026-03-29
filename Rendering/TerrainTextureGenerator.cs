@@ -12,13 +12,22 @@ public class TerrainTextureGenerator
 {
     private const int Size = GameConfig.TileSize; // 32
 
+    public static bool IsLiquid(TerrainId terrain) =>
+        terrain == TerrainId.Water || terrain == TerrainId.DeepWater || terrain == TerrainId.Lava;
+
+    // Map reference for per-pixel water depth interpolation
+    private TileMap _map;
+    public void SetMap(TileMap map) => _map = map;
+
     public Texture2D Generate(GraphicsDevice device, TileData tile, NeighborContext neighbors,
-        int worldX, int worldY, IReadOnlyList<TileEffect> effects)
+        int worldX, int worldY, IReadOnlyList<TileEffect> effects, int animFrame = 0, int animTotalFrames = 4)
     {
         var pixels = new Color[Size * Size];
 
         if (tile.HasWall)
             GenerateWall(pixels, tile, neighbors);
+        else if (IsLiquid(tile.Terrain))
+            GenerateLiquid(pixels, tile, animFrame, animTotalFrames, worldX, worldY);
         else
             GenerateTerrain(pixels, tile);
 
@@ -247,62 +256,147 @@ public class TerrainTextureGenerator
     public Texture2D GenerateMemory(GraphicsDevice device, TileData tile, NeighborContext neighbors,
         int worldX, int worldY)
     {
+        var baseTex = Generate(device, tile, neighbors, worldX, worldY, null);
         var pixels = new Color[Size * Size];
+        baseTex.GetData(pixels);
+        baseTex.Dispose();
 
-        if (tile.HasWall)
-            GenerateWall(pixels, tile, neighbors);
-        else
-            GenerateTerrain(pixels, tile);
-
-        for (int i = 0; i < pixels.Length; i++)
-        {
-            var c = pixels[i];
-            float gray = c.R * 0.299f + c.G * 0.587f + c.B * 0.114f;
-            gray *= 0.3f;
-            pixels[i] = new Color((int)gray, (int)gray, (int)gray);
-        }
+        ToGrayscale(pixels);
 
         var texture = new Texture2D(device, Size, Size);
         texture.SetData(pixels);
         return texture;
     }
 
+    public static void ToGrayscale(Color[] pixels)
+    {
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            var c = pixels[i];
+            float gray = c.R * 0.299f + c.G * 0.587f + c.B * 0.114f;
+            gray *= 0.3f;
+            pixels[i] = new Color((int)gray, (int)gray, (int)gray, c.A);
+        }
+    }
+
     public Texture2D GenerateAnimated(GraphicsDevice device, TileData tile, NeighborContext neighbors,
         int worldX, int worldY, IReadOnlyList<TileEffect> effects, int frame, int totalFrames)
     {
-        var pixels = new Color[Size * Size];
-        var def = TerrainRegistry.Get(tile.Terrain);
-        int seed = tile.VariantSeed;
+        return Generate(device, tile, neighbors, worldX, worldY, effects, frame, totalFrames);
+    }
 
-        float timeOffset = (float)frame / totalFrames * MathF.PI * 2f;
+    private void GenerateLiquid(Color[] pixels, TileData tile, int frame, int totalFrames,
+        int worldX, int worldY)
+    {
+        if (tile.Terrain == TerrainId.Lava)
+            GenerateLava(pixels, tile, frame, totalFrames);
+        else
+            GenerateWater(pixels, tile, frame, totalFrames, worldX, worldY);
+    }
+
+    private void GenerateWater(Color[] pixels, TileData tile, int frame, int totalFrames,
+        int worldX, int worldY)
+    {
+        var def = TerrainRegistry.Get(tile.Terrain);
+        var style = WaterStyleRegistry.Get(tile.WaterStyle);
+        int seed = tile.VariantSeed;
+        float frameT = (float)frame / totalFrames * MathF.PI * 2f;
 
         for (int py = 0; py < Size; py++)
         {
             for (int px = 0; px < Size; px++)
             {
-                int h = HashPixel(px, py, seed);
-                float rand01 = (h & 0xFFF) / 4095f;
-                float t = rand01 * def.NoiseAmplitude + (1f - def.NoiseAmplitude) * 0.5f;
-                var color = LerpColor(def.VariantColorMin, def.VariantColorMax, t);
+                float depth = _map != null
+                    ? _map.GetInterpolatedWaterDepth(worldX, worldY, px, py)
+                    : tile.WaterDepth;
 
-                float phase = (seed & 0xFF) * 0.1f;
-                float wave = MathF.Sin(py * 0.5f + MathF.Sin(px * 0.3f + phase) * 1.5f + timeOffset);
-                float wave2 = MathF.Sin(px * 0.4f + py * 0.2f + phase * 0.7f + timeOffset * 1.3f);
-                color = ShiftBrightness(color, (wave * 0.10f + wave2 * 0.06f));
+                var color = LerpColor(style.ShallowColor, style.DeepColor, depth);
 
-                if (tile.Terrain == TerrainId.Water || tile.Terrain == TerrainId.DeepWater)
-                {
-                    float spec = MathF.Max(0, wave * wave2) * 0.15f;
-                    color = ShiftBrightness(color, spec);
-                }
+                // Per-pixel shimmer: each pixel has a random brightness offset
+                // and a phase that determines when it's active
+                int h = HashPixel(px, py, seed + 100);
+                int pixelPhase = h & 7;
+                float pixelBright = ((h >> 3) & 0xFF) / 255f; // 0..1 how bright this pixel is
+
+                if (pixelPhase == (frame % 8))
+                    color = ShiftBrightness(color, pixelBright * 0.07f * (1f - depth * 0.5f));
+                else
+                    color = ShiftBrightness(color, pixelBright * 0.02f * (1f - depth * 0.5f));
 
                 pixels[py * Size + px] = color;
             }
         }
 
-        var texture = new Texture2D(device, Size, Size);
-        texture.SetData(pixels);
-        return texture;
+        PixelUtil.Pixelize(pixels, Size, def.PixelSize);
+    }
+
+    private static void GenerateLava(Color[] pixels, TileData tile, int frame, int totalFrames)
+    {
+        var def = TerrainRegistry.Get(tile.Terrain);
+        int seed = tile.VariantSeed;
+        float frameT = (float)frame / totalFrames;
+
+        int cellCount = 20;
+        var cellX = new float[cellCount];
+        var cellY = new float[cellCount];
+        var cellShade = new float[cellCount];
+        for (int i = 0; i < cellCount; i++)
+        {
+            int ch = HashPixel(i * 17, i * 31, seed + 900 + i);
+            float baseX = (ch & 0xFF) / 255f * Size;
+            float baseY = ((ch >> 8) & 0xFF) / 255f * Size;
+            float drift = frameT * MathF.PI * 2f;
+            cellX[i] = baseX + MathF.Sin(drift + i * 2.1f) * 1f;
+            cellY[i] = baseY + MathF.Cos(drift + i * 1.7f) * 1f;
+            cellShade[i] = ((ch >> 16) & 0xFF) / 255f;
+        }
+
+        var highlightColor = new Color(240, 140, 30);
+
+        for (int py = 0; py < Size; py++)
+        {
+            for (int px = 0; px < Size; px++)
+            {
+                float minDist = float.MaxValue;
+                float minDist2 = float.MaxValue;
+                float nearestShade = 0f;
+
+                for (int i = 0; i < cellCount; i++)
+                {
+                    float dx = px - cellX[i];
+                    float dy = py - cellY[i];
+                    float dist = dx * dx + dy * dy;
+                    if (dist < minDist)
+                    {
+                        minDist2 = minDist;
+                        minDist = dist;
+                        nearestShade = cellShade[i];
+                    }
+                    else if (dist < minDist2)
+                    {
+                        minDist2 = dist;
+                    }
+                }
+
+                minDist = MathF.Sqrt(minDist);
+                minDist2 = MathF.Sqrt(minDist2);
+
+                float edgeFactor = minDist / (minDist + minDist2 + 0.01f);
+
+                float t = nearestShade * 0.4f + 0.3f;
+                var color = LerpColor(def.VariantColorMin, def.VariantColorMax, t);
+
+                float edgeDarken = edgeFactor > 0.40f ? (edgeFactor - 0.40f) * 2f : 0f;
+                color = ShiftBrightness(color, -edgeDarken * 0.18f);
+
+                float centerBright = Math.Max(0f, 0.33f - edgeFactor) * 0.5f;
+                color = LerpColor(color, highlightColor, centerBright);
+
+                pixels[py * Size + px] = color;
+            }
+        }
+
+        PixelUtil.Pixelize(pixels, Size, def.PixelSize);
     }
 
     // --- Helpers ---

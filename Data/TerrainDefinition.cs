@@ -15,4 +15,11 @@ public class TerrainDefinition
     public TerrainPattern Pattern;
     public byte TransitionPriority; // higher encroaches into lower
     public int PixelSize;          // pixelization block size (1 = none, 2 = chunky)
+
+    // Light emission (0 radius = no light)
+    public float LightRadius;
+    public float LightIntensity;
+    public Vector3 LightColor;
+    public bool LightFlicker;
+    public float LightFlickerIntensity;
 }

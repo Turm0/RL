@@ -40,7 +40,7 @@ public class RenderPipeline
             ViewportHeight = graphicsDevice.Viewport.Height
         };
 
-        _terrainRenderer = new TerrainRenderer();
+        _terrainRenderer = new TerrainRenderer(map);
         _entityRenderer = new EntityRenderer(new VectorRasterizer(), new TextureCache());
         _roofRenderer = new RoofRenderer();
         _effectOverlayRenderer = new EffectOverlayRenderer();
@@ -116,6 +116,24 @@ public class RenderPipeline
 
             _lightingSystem.AddLight(pos.TileX, pos.TileY, light.Radius, light.Intensity,
                 light.Color, map, time, light.Flicker, light.FlickerIntensity, flickerSeed);
+        }
+
+        // Terrain-emitted lights (lava, etc.)
+        for (int tx = visibleRect.X; tx < visibleRect.X + visibleRect.Width; tx++)
+        {
+            for (int ty = visibleRect.Y; ty < visibleRect.Y + visibleRect.Height; ty++)
+            {
+                if (!map.IsInBounds(tx, ty)) continue;
+                var tile = map.GetTile(tx, ty);
+                if (tile.HasWall) continue;
+                var terrainDef = Data.TerrainRegistry.Get(tile.Terrain);
+                if (terrainDef.LightRadius <= 0f) continue;
+
+                int flickerSeed = ((tx * 7 + ty * 13) & 0xFF);
+                _lightingSystem.AddLight(tx, ty, terrainDef.LightRadius, terrainDef.LightIntensity,
+                    terrainDef.LightColor, map, time, terrainDef.LightFlicker,
+                    terrainDef.LightFlickerIntensity, flickerSeed);
+            }
         }
 
         _lightingSystem.BlurBuffer();

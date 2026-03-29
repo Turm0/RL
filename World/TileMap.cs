@@ -158,6 +158,89 @@ public class TileMap
         return _tiles[x, y].ZoneId;
     }
 
+    // --- Water depth computation ---
+
+    /// <summary>
+    /// Computes WaterDepth for all water tiles based on distance to nearest non-water tile.
+    /// Call after all tiles are placed.
+    /// </summary>
+    public void ComputeWaterDepth(float maxDepthDistance = 4f)
+    {
+        for (int x = 0; x < Width; x++)
+        {
+            for (int y = 0; y < Height; y++)
+            {
+                if (!TerrainTextureGenerator_IsWater(_tiles[x, y].Terrain))
+                {
+                    _tiles[x, y].WaterDepth = 0f;
+                    continue;
+                }
+
+                // Find minimum distance to any non-water tile
+                float minDist = maxDepthDistance;
+                int searchRadius = (int)maxDepthDistance + 1;
+
+                for (int dx = -searchRadius; dx <= searchRadius; dx++)
+                {
+                    for (int dy = -searchRadius; dy <= searchRadius; dy++)
+                    {
+                        int nx = x + dx, ny = y + dy;
+                        if (!IsInBounds(nx, ny))
+                        {
+                            // Map edge counts as shore
+                            float edgeDist = System.MathF.Sqrt(dx * dx + dy * dy);
+                            if (edgeDist < minDist) minDist = edgeDist;
+                            continue;
+                        }
+
+                        if (!TerrainTextureGenerator_IsWater(_tiles[nx, ny].Terrain))
+                        {
+                            float dist = System.MathF.Sqrt(dx * dx + dy * dy);
+                            if (dist < minDist) minDist = dist;
+                        }
+                    }
+                }
+
+                _tiles[x, y].WaterDepth = System.Math.Clamp(minDist / maxDepthDistance, 0f, 1f);
+            }
+        }
+    }
+
+    private static bool TerrainTextureGenerator_IsWater(TerrainId terrain) =>
+        terrain == TerrainId.Water || terrain == TerrainId.DeepWater;
+
+    /// <summary>
+    /// Gets the interpolated water depth at a sub-tile position (for per-pixel rendering).
+    /// </summary>
+    public float GetInterpolatedWaterDepth(int tileX, int tileY, float localX, float localY)
+    {
+        float centerDepth = GetWaterDepth(tileX, tileY);
+
+        // Bilinear interpolation with neighbors for smooth gradients
+        float nx = localX / 32f - 0.5f; // -0.5 to 0.5
+        float ny = localY / 32f - 0.5f;
+
+        int dx = nx >= 0 ? 1 : -1;
+        int dy = ny >= 0 ? 1 : -1;
+        float fx = System.Math.Abs(nx);
+        float fy = System.Math.Abs(ny);
+
+        float d00 = centerDepth;
+        float d10 = GetWaterDepth(tileX + dx, tileY);
+        float d01 = GetWaterDepth(tileX, tileY + dy);
+        float d11 = GetWaterDepth(tileX + dx, tileY + dy);
+
+        float top = d00 * (1f - fx) + d10 * fx;
+        float bot = d01 * (1f - fx) + d11 * fx;
+        return top * (1f - fy) + bot * fy;
+    }
+
+    private float GetWaterDepth(int x, int y)
+    {
+        if (!IsInBounds(x, y)) return 0f;
+        return _tiles[x, y].WaterDepth;
+    }
+
     // --- Variant seed helper ---
 
     public static ushort ComputeVariantSeed(int x, int y, int mapSeed = 12345)

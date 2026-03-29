@@ -127,8 +127,7 @@ public class LightingSystem
         {
             float phase1 = flickerSeed * 1.7f;
             float phase2 = flickerSeed * 2.3f;
-            // Gentle waver: two slow sines added, not multiplied — avoids sharp on/off beats
-            flickerMod = 1f - flickerIntensity * (MathF.Sin(time * 3f + phase1) * 0.4f + MathF.Sin(time * 5f + phase2) * 0.25f);
+            flickerMod = 1f - flickerIntensity * MathF.Sin(time * 4f + phase1) * MathF.Sin(time * 7f + phase2) * 0.5f;
         }
 
         float effectiveIntensity = intensity * flickerMod;
