@@ -35,6 +35,8 @@ public class TerrainTextureGenerator
         for (int py = 0; py < Size; py++)
             for (int px = 0; px < Size; px++)
                 pixels[py * Size + px] = SampleTerrain(def, seed, px, py);
+
+        PixelUtil.Pixelize(pixels, Size, def.PixelSize);
     }
 
     private static void GenerateWall(Color[] pixels, TileData tile, NeighborContext neighbors)
@@ -46,33 +48,134 @@ public class TerrainTextureGenerator
         {
             for (int px = 0; px < Size; px++)
             {
-                var color = SampleWall(def, seed, px, py);
+                const int faceDepth = 12; // front face (south)
+                const int sideFaceDepth = 5; // side face (east/west)
 
-                if (!neighbors.WallS && py >= Size - 4)
+                bool openS = !neighbors.WallS;
+                bool openW = !neighbors.WallW;
+                bool openE = !neighbors.WallE;
+
+                int capLineS = Size - faceDepth;
+
+                Color color;
+                bool drawn = false;
+
+                // SOUTH FACE — the front surface (highest priority)
+                if (openS && py >= capLineS)
                 {
-                    float blend = (py - (Size - 4)) / 4f;
-                    color = LerpColor(color, def.HighlightColor, blend * 0.7f);
+                    int faceY = py - capLineS;
+                    float faceT = (float)faceY / (faceDepth - 1);
+
+                    color = SampleWallBlock(def, seed, px, py);
+                    color = ShiftBrightness(color, -0.12f - faceT * 0.10f);
+
+                    if (faceY <= 1)
+                        color = LerpColor(color, def.HighlightColor, 0.6f - faceY * 0.3f);
+
+                    drawn = true;
+                }
+                // WEST FACE — left side visible (room is to the left)
+                else if (openW && px < sideFaceDepth)
+                {
+                    float faceT = 1f - (float)px / (sideFaceDepth - 1);
+
+                    color = SampleWallBlock(def, seed, px, py);
+                    color = ShiftBrightness(color, -0.06f - faceT * 0.06f);
+
+                    if (px == 0)
+                        color = LerpColor(color, def.HighlightColor, 0.3f);
+
+                    drawn = true;
+                }
+                // EAST FACE — right side visible (room is to the right)
+                else if (openE && px >= Size - sideFaceDepth)
+                {
+                    float faceT = (float)(px - (Size - sideFaceDepth)) / (sideFaceDepth - 1);
+
+                    color = SampleWallBlock(def, seed, px, py);
+                    color = ShiftBrightness(color, -0.06f - faceT * 0.06f);
+
+                    if (px == Size - 1)
+                        color = LerpColor(color, def.HighlightColor, 0.3f);
+
+                    drawn = true;
+                }
+                else
+                {
+                    color = default;
+                }
+
+                if (!drawn)
+                {
+                    // WALL TOP — flat top surface
+                    color = SampleWallBlock(def, seed, px, py);
+
+                    if (!openS && !openW && !openE && neighbors.WallN)
+                        color = ShiftBrightness(color, -0.06f);
                 }
 
                 pixels[py * Size + px] = color;
             }
         }
+
+        PixelUtil.Pixelize(pixels, Size, def.PixelSize);
     }
 
-    private static Color SampleTerrain(TerrainDefinition def, int seed, int px, int py)
+    private static Color SampleWallBlock(WallDefinition def, int seed, int px, int py)
     {
+        int blockW = def.BlockWidth;
+        int blockH = def.BlockHeight;
+        int mortar = def.MortarWidth;
+
+        // Stagger every other row by half a block width
+        int row = py / blockH;
+        int staggerOffset = (def.Staggered && (row & 1) != 0) ? blockW / 2 : 0;
+        int seedOffset = (seed & 0xF) * 2;
+
+        int localX = (px + staggerOffset + seedOffset) % blockW;
+        int localY = py % blockH;
+
+        // Mortar lines between blocks
+        if (localX < mortar || localY < mortar)
+            return ShiftBrightness(def.BaseColor, -0.07f);
+
+        // Each block gets its own shade
+        int blockCol = (px + staggerOffset + seedOffset) / blockW;
+        int blockSeed = HashPixel(blockCol, row, seed + 808);
+        float blockShade = ((blockSeed & 0xFF) / 255f - 0.5f) * 0.12f;
+
+        // Per-pixel variation
         int h = HashPixel(px, py, seed);
-        float rand01 = (h & 0xFFF) / 4095f;
+        float pixelVar = ((h & 0xFF) / 255f - 0.5f) * 0.04f;
 
-        float t = rand01 * def.NoiseAmplitude + (1f - def.NoiseAmplitude) * 0.5f;
-        var color = LerpColor(def.VariantColorMin, def.VariantColorMax, t);
+        float t = ((h >> 8) & 0xFFF) / 4095f;
+        var color = LerpColor(def.VariantColorMin, def.VariantColorMax,
+            t * def.NoiseAmplitude + (1f - def.NoiseAmplitude) * 0.5f);
 
-        color = ApplyPatternLocal(color, def.Pattern, seed, px, py);
+        color = ShiftBrightness(color, blockShade + pixelVar);
+
+        // Top highlight on block face
+        if (localY == mortar)
+            color = ShiftBrightness(color, 0.06f);
+        else if (localY == mortar + 1)
+            color = ShiftBrightness(color, 0.03f);
+
+        // Bottom shadow on block face
+        if (localY == blockH - 1)
+            color = ShiftBrightness(color, -0.05f);
+
+        // Optional roughness (e.g. cave walls)
+        if (def.Roughness > 0f)
+        {
+            int hRough = HashPixel(px / 2, py / 2, seed + 909);
+            float rough = ((hRough & 0xFF) / 255f - 0.5f) * def.Roughness;
+            color = ShiftBrightness(color, rough);
+        }
 
         return color;
     }
 
-    private static Color SampleWall(WallDefinition def, int seed, int px, int py)
+    private static Color SampleTerrain(TerrainDefinition def, int seed, int px, int py)
     {
         int h = HashPixel(px, py, seed);
         float rand01 = (h & 0xFFF) / 4095f;
@@ -91,29 +194,20 @@ public class TerrainTextureGenerator
         {
             case TerrainPattern.Speckled:
             {
-                int h = HashPixel(px, py, seed + 101);
-                if ((h & 0x1F) == 0)
-                {
-                    float shift = ((h >> 5) & 0xFF) / 255f * 0.3f - 0.15f;
-                    return ShiftBrightness(baseColor, shift);
-                }
-                float grain = ((HashPixel(px, py, seed + 202) & 0xFF) / 255f - 0.5f) * 0.06f;
-                return ShiftBrightness(baseColor, grain);
+                int h1 = HashPixel(px / 3, py / 3, seed + 101);
+                int h2 = HashPixel(px, py, seed + 202);
+                float broad = ((h1 & 0xFF) / 255f - 0.5f) * 0.08f;
+                float fine = ((h2 & 0xFF) / 255f - 0.5f) * 0.04f;
+                return ShiftBrightness(baseColor, broad + fine);
             }
 
             case TerrainPattern.Organic:
             {
-                int h1 = HashPixel(px / 4, py / 4, seed + 303);
-                int h2 = HashPixel(px / 6, py / 6, seed + 404);
-                float patch = ((h1 & 0xFF) / 255f - 0.5f) * 0.2f
-                            + ((h2 & 0xFF) / 255f - 0.5f) * 0.12f;
-                var result = ShiftBrightness(baseColor, patch);
-
-                int h3 = HashPixel(px, py, seed + 505);
-                if ((h3 & 0x3F) == 0)
-                    result = ShiftBrightness(result, -0.18f);
-
-                return result;
+                int h1 = HashPixel(px / 3, py / 3, seed + 303);
+                int h2 = HashPixel(px / 5, py / 5, seed + 404);
+                float patch = ((h1 & 0xFF) / 255f - 0.5f) * 0.10f
+                            + ((h2 & 0xFF) / 255f - 0.5f) * 0.08f;
+                return ShiftBrightness(baseColor, patch);
             }
 
             case TerrainPattern.Ripple:
@@ -126,12 +220,18 @@ public class TerrainTextureGenerator
             case TerrainPattern.Plank:
             {
                 int offset = seed & 7;
-                int plankY = (py + offset) % 8;
+                int plankY = (py + offset) % 16;
+                // Subtle gap between planks (1px, gentle darkening)
                 if (plankY == 0)
-                    return ShiftBrightness(baseColor, -0.14f);
-                int h = HashPixel(px, py, seed + 606);
-                float grain = ((h & 0xFF) / 255f - 0.5f) * 0.06f;
-                return ShiftBrightness(baseColor, grain);
+                    return ShiftBrightness(baseColor, -0.06f);
+                // Each plank gets its own shade
+                int plankIdx = (py + offset) / 16;
+                int plankSeed = HashPixel(0, plankIdx, seed + 606);
+                float plankShade = ((plankSeed & 0xFF) / 255f - 0.5f) * 0.06f;
+                // Subtle horizontal grain
+                int h = HashPixel(px / 3, py, seed + 707);
+                float grain = ((h & 0xFF) / 255f - 0.5f) * 0.03f;
+                return ShiftBrightness(baseColor, plankShade + grain);
             }
 
             case TerrainPattern.Flat:

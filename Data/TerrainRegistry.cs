@@ -16,13 +16,14 @@ public static class TerrainRegistry
             Id = TerrainId.Stone,
             Name = "Stone",
             Walkable = true,
-            BaseColor = new Color(62, 58, 52),
-            VariantColorMin = new Color(55, 50, 44),
-            VariantColorMax = new Color(70, 65, 58),
+            BaseColor = new Color(78, 74, 68),
+            VariantColorMin = new Color(72, 68, 62),
+            VariantColorMax = new Color(85, 80, 74),
             NoiseFrequency = 0.06f,
-            NoiseAmplitude = 0.15f,
+            NoiseAmplitude = 0.12f,
             Pattern = TerrainPattern.Flat,
-            TransitionPriority = 10
+            TransitionPriority = 10,
+            PixelSize = 2
         });
 
         Register(new TerrainDefinition
@@ -30,13 +31,14 @@ public static class TerrainRegistry
             Id = TerrainId.Dirt,
             Name = "Dirt",
             Walkable = true,
-            BaseColor = new Color(72, 56, 38),
-            VariantColorMin = new Color(62, 48, 32),
-            VariantColorMax = new Color(82, 64, 44),
-            NoiseFrequency = 0.10f,
-            NoiseAmplitude = 0.20f,
+            BaseColor = new Color(88, 72, 52),
+            VariantColorMin = new Color(82, 66, 46),
+            VariantColorMax = new Color(95, 78, 58),
+            NoiseFrequency = 0.08f,
+            NoiseAmplitude = 0.12f,
             Pattern = TerrainPattern.Speckled,
-            TransitionPriority = 45
+            TransitionPriority = 45,
+            PixelSize = 2
         });
 
         Register(new TerrainDefinition
@@ -44,13 +46,14 @@ public static class TerrainRegistry
             Id = TerrainId.Grass,
             Name = "Grass",
             Walkable = true,
-            BaseColor = new Color(45, 62, 36),
-            VariantColorMin = new Color(38, 55, 30),
-            VariantColorMax = new Color(55, 72, 42),
-            NoiseFrequency = 0.15f,
-            NoiseAmplitude = 0.30f,
+            BaseColor = new Color(58, 78, 45),
+            VariantColorMin = new Color(52, 72, 40),
+            VariantColorMax = new Color(65, 85, 50),
+            NoiseFrequency = 0.12f,
+            NoiseAmplitude = 0.15f,
             Pattern = TerrainPattern.Organic,
-            TransitionPriority = 40
+            TransitionPriority = 40,
+            PixelSize = 2
         });
 
         Register(new TerrainDefinition
@@ -64,7 +67,8 @@ public static class TerrainRegistry
             NoiseFrequency = 0.08f,
             NoiseAmplitude = 0.15f,
             Pattern = TerrainPattern.Speckled,
-            TransitionPriority = 20
+            TransitionPriority = 20,
+            PixelSize = 2
         });
 
         Register(new TerrainDefinition
@@ -78,7 +82,8 @@ public static class TerrainRegistry
             NoiseFrequency = 0.12f,
             NoiseAmplitude = 0.25f,
             Pattern = TerrainPattern.Ripple,
-            TransitionPriority = 60
+            TransitionPriority = 60,
+            PixelSize = 2
         });
 
         Register(new TerrainDefinition
@@ -92,7 +97,8 @@ public static class TerrainRegistry
             NoiseFrequency = 0.10f,
             NoiseAmplitude = 0.20f,
             Pattern = TerrainPattern.Ripple,
-            TransitionPriority = 65
+            TransitionPriority = 65,
+            PixelSize = 2
         });
 
         Register(new TerrainDefinition
@@ -106,7 +112,8 @@ public static class TerrainRegistry
             NoiseFrequency = 0.10f,
             NoiseAmplitude = 0.30f,
             Pattern = TerrainPattern.Ripple,
-            TransitionPriority = 70
+            TransitionPriority = 70,
+            PixelSize = 2
         });
 
         Register(new TerrainDefinition
@@ -120,7 +127,8 @@ public static class TerrainRegistry
             NoiseFrequency = 0.05f,
             NoiseAmplitude = 0.10f,
             Pattern = TerrainPattern.Flat,
-            TransitionPriority = 15
+            TransitionPriority = 15,
+            PixelSize = 2
         });
 
         Register(new TerrainDefinition
@@ -134,7 +142,8 @@ public static class TerrainRegistry
             NoiseFrequency = 0.20f,
             NoiseAmplitude = 0.15f,
             Pattern = TerrainPattern.Plank,
-            TransitionPriority = 5
+            TransitionPriority = 5,
+            PixelSize = 2
         });
 
         Register(new TerrainDefinition
@@ -148,7 +157,8 @@ public static class TerrainRegistry
             NoiseFrequency = 0.12f,
             NoiseAmplitude = 0.20f,
             Pattern = TerrainPattern.Speckled,
-            TransitionPriority = 12
+            TransitionPriority = 12,
+            PixelSize = 2
         });
     }
 

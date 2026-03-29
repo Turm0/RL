@@ -15,52 +15,68 @@ public static class WallRegistry
         {
             Id = WallType.StoneWall,
             Name = "Stone Wall",
-            BaseColor = new Color(75, 70, 62),
-            HighlightColor = new Color(95, 88, 78),
-            VariantColorMin = new Color(68, 63, 55),
-            VariantColorMax = new Color(82, 77, 68),
-            NoiseFrequency = 0.08f,
-            NoiseAmplitude = 0.12f,
-            Pattern = TerrainPattern.Flat
+            BaseColor = new Color(82, 78, 70),
+            HighlightColor = new Color(100, 94, 84),
+            VariantColorMin = new Color(75, 70, 62),
+            VariantColorMax = new Color(90, 85, 76),
+            NoiseAmplitude = 0.10f,
+            BlockWidth = 14,
+            BlockHeight = 8,
+            MortarWidth = 1,
+            Staggered = true,
+            Roughness = 0f,
+            PixelSize = 2
         });
 
         Register(new WallDefinition
         {
             Id = WallType.BrickWall,
             Name = "Brick Wall",
-            BaseColor = new Color(95, 55, 45),
-            HighlightColor = new Color(110, 70, 58),
-            VariantColorMin = new Color(85, 48, 38),
-            VariantColorMax = new Color(105, 62, 50),
-            NoiseFrequency = 0.15f,
-            NoiseAmplitude = 0.15f,
-            Pattern = TerrainPattern.Flat
+            BaseColor = new Color(100, 60, 48),
+            HighlightColor = new Color(115, 75, 60),
+            VariantColorMin = new Color(90, 52, 42),
+            VariantColorMax = new Color(110, 68, 55),
+            NoiseAmplitude = 0.12f,
+            BlockWidth = 16,
+            BlockHeight = 8,
+            MortarWidth = 1,
+            Staggered = true,
+            Roughness = 0f,
+            PixelSize = 2
         });
 
         Register(new WallDefinition
         {
             Id = WallType.CaveWall,
             Name = "Cave Wall",
-            BaseColor = new Color(58, 52, 46),
-            HighlightColor = new Color(72, 65, 58),
-            VariantColorMin = new Color(48, 42, 36),
-            VariantColorMax = new Color(65, 58, 52),
-            NoiseFrequency = 0.12f,
-            NoiseAmplitude = 0.25f,
-            Pattern = TerrainPattern.Organic
+            BaseColor = new Color(62, 56, 50),
+            HighlightColor = new Color(76, 70, 62),
+            VariantColorMin = new Color(52, 46, 40),
+            VariantColorMax = new Color(70, 64, 56),
+            NoiseAmplitude = 0.15f,
+            BlockWidth = 9,
+            BlockHeight = 8,
+            MortarWidth = 1,
+            Staggered = false,
+            Roughness = 0.10f,
+            PixelSize = 2
         });
 
         Register(new WallDefinition
         {
             Id = WallType.WoodWall,
             Name = "Wood Wall",
-            BaseColor = new Color(75, 55, 35),
-            HighlightColor = new Color(90, 68, 45),
-            VariantColorMin = new Color(65, 48, 30),
-            VariantColorMax = new Color(85, 62, 40),
-            NoiseFrequency = 0.18f,
-            NoiseAmplitude = 0.12f,
-            Pattern = TerrainPattern.Plank
+            BaseColor = new Color(80, 60, 38),
+            HighlightColor = new Color(95, 72, 48),
+            VariantColorMin = new Color(72, 54, 34),
+            VariantColorMax = new Color(88, 66, 42),
+            NoiseAmplitude = 0.10f,
+            BlockWidth = 10,
+            BlockHeight = 32,
+            MortarWidth = 1,
+            Staggered = false,
+            Roughness = 0f,
+            PixelSize = 2
         });
     }
 

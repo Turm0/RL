@@ -6,7 +6,6 @@ public class ZoneDefinition
 {
     public ushort Id;
     public bool HasRoof;
-    public string RoofStyle; // "thatch", "stone_tiles", "wood_shingle"
-    public Color RoofColor;
+    public RoofMaterialType RoofMaterial;
     public Rectangle Bounds;
 }

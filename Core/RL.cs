@@ -183,8 +183,7 @@ public class RL : Game
         {
             Id = cottageZone,
             HasRoof = true,
-            RoofStyle = "thatch",
-            RoofColor = new Color(120, 95, 50),
+            RoofMaterial = RoofMaterialType.WoodShingle,
             Bounds = cottageBounds
         });
 
@@ -249,8 +248,7 @@ public class RL : Game
         {
             Id = tavernZone,
             HasRoof = true,
-            RoofStyle = "stone_tiles",
-            RoofColor = new Color(85, 78, 65),
+            RoofMaterial = RoofMaterialType.WoodShingle,
             Bounds = tavernBounds
         });
 

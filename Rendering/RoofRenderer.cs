@@ -5,6 +5,7 @@ using Microsoft.Xna.Framework.Graphics;
 using RoguelikeEngine.Core;
 using RoguelikeEngine.Data;
 using RoguelikeEngine.World;
+using static RoguelikeEngine.World.TileMap;
 
 namespace RoguelikeEngine.Rendering;
 
@@ -12,15 +13,8 @@ public class RoofRenderer
 {
     private readonly TextureCache _cache = new();
     private readonly TextureCache _memoryCache = new();
-    private readonly FastNoiseLite _noise;
     private readonly Dictionary<ushort, float> _roofAlpha = new();
     private const float FadeSpeed = 4f;
-
-    public RoofRenderer()
-    {
-        _noise = new FastNoiseLite(5813);
-        _noise.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2);
-    }
 
     public void Update(GameTime gameTime, TileMap map, ushort playerZoneId)
     {
@@ -80,7 +74,7 @@ public class RoofRenderer
                     bool useNormalColor = roofSeen || fow.IsVisible(x, y);
                     DoorEdge doorEdge = inZone ? DetectDoorEdge(map, x, y, zone.Id) : DoorEdge.None;
 
-                    var cacheKey = $"roof_{zone.RoofStyle}_{zone.RoofColor.PackedValue}_{TileMap.ComputeVariantSeed(x, y)}_{(int)doorEdge}";
+                    var cacheKey = $"roof_{(byte)zone.RoofMaterial}_{ComputeVariantSeed(x, y)}_{(int)doorEdge}";
 
                     Texture2D texture;
                     if (useNormalColor)
@@ -211,28 +205,14 @@ public class RoofRenderer
     {
         int size = GameConfig.TileSize;
         var pixels = new Color[size * size];
-        var baseColor = zone.RoofColor;
+        var mat = RoofMaterialRegistry.Get(zone.RoofMaterial);
+        int seed = ComputeVariantSeed(worldX, worldY);
 
         for (int py = 0; py < size; py++)
         {
             for (int px = 0; px < size; px++)
             {
-                float wpx = worldX * size + px;
-                float wpy = worldY * size + py;
-
-                float n = _noise.GetNoise(wpx * 0.3f, wpy * 0.3f) * 0.12f;
-
-                Color c = zone.RoofStyle switch
-                {
-                    "thatch" => ShiftBrightness(baseColor,
-                        n + MathF.Sin(wpy * 0.8f + _noise.GetNoise(wpx * 0.5f, wpy * 0.2f) * 3f) * 0.08f),
-                    "stone_tiles" => (((int)wpx % 8 == 0) || ((int)wpy % 6 == 0))
-                        ? ShiftBrightness(baseColor, -0.1f + n)
-                        : ShiftBrightness(baseColor, n),
-                    "wood_shingle" => ShiftBrightness(baseColor,
-                        n + (((int)wpy % 6) < 1 ? -0.08f : (((int)wpy % 6) > 4 ? 0.04f : 0f))),
-                    _ => ShiftBrightness(baseColor, n)
-                };
+                var c = SampleRoofPixel(mat, seed, px, py);
 
                 if (doorEdge != DoorEdge.None)
                     c = ApplyDoorIndicator(c, px, py, size, doorEdge);
@@ -241,7 +221,79 @@ public class RoofRenderer
             }
         }
 
+        PixelUtil.Pixelize(pixels, size, mat.PixelSize);
+
         return pixels;
+    }
+
+    private static Color SampleRoofPixel(RoofMaterial mat, int seed, int px, int py)
+    {
+        int rowH = mat.RowHeight;
+        int pieceW = mat.PieceWidth;
+
+        int row = py / rowH;
+        int localY = py % rowH;
+
+        int staggerOffset = (mat.Staggered && (row & 1) != 0) ? pieceW / 2 : 0;
+        int seedShift = (seed & 0xF) * 3;
+        int shiftedX = px + staggerOffset + seedShift;
+
+        int localX = shiftedX % pieceW;
+        int pieceCol = shiftedX / pieceW;
+
+        int pieceSeed = HashPixel(pieceCol, row, seed + 555);
+
+        // --- Curved bottom edge with per-pixel noise for irregular/pixelated look ---
+        float centerT = Math.Abs(localX - pieceW / 2f) / (pieceW / 2f);
+        int edgeNoise = (HashPixel(localX, row, pieceSeed + 123) & 3) - 1; // -1 to 2
+        int curveHeight = rowH - 1 - (int)(centerT * centerT * 3) + edgeNoise;
+        curveHeight = Math.Clamp(curveHeight, 2, rowH - 1);
+
+        bool belowCurve = localY > curveHeight;
+
+        // --- Vertical gap: irregular width (0-1px jitter per row) ---
+        if (pieceW < 32)
+        {
+            int gapJitter = (HashPixel(pieceCol, row, seed + 999) & 1); // 0 or 1
+            if (localX <= gapJitter)
+                return mat.MortarColor;
+        }
+
+        if (belowCurve)
+        {
+            int nextRowPieceSeed = HashPixel(pieceCol, row + 1, seed + 555);
+            float nt = ((nextRowPieceSeed & 0xFFFF) % 1000) / 999f;
+            var behindColor = LerpColor(mat.VariantColorMin, mat.VariantColorMax, nt);
+            return ShiftBrightness(behindColor, -0.10f);
+        }
+
+        // --- Overlap shadow at top: irregular (1-2px, varies per shingle) ---
+        int shadowDepth = 1 + ((pieceSeed >> 12) & 1); // 1 or 2
+        if (localY < shadowDepth && mat.Staggered)
+            return ShiftBrightness(mat.MortarColor, 0.05f);
+
+        // --- Shingle face color ---
+        float t = ((pieceSeed & 0xFFFF) % 1000) / 999f;
+        var color = LerpColor(mat.VariantColorMin, mat.VariantColorMax, t);
+
+        // Subtle vertical grain
+        int grainH = HashPixel(localX, py / 3, pieceSeed);
+        float grain = ((grainH & 0xFF) / 255f - 0.5f) * 0.04f;
+        color = ShiftBrightness(color, grain);
+
+        // Slight darkening toward bottom of each shingle (depth)
+        float yFade = (float)localY / curveHeight * 0.05f;
+        color = ShiftBrightness(color, -yFade);
+
+        // Per-pixel roughness
+        if (mat.Roughness > 0f)
+        {
+            int h = HashPixel(px, py, seed + 777);
+            float rough = ((h & 0xFF) / 255f - 0.5f) * mat.Roughness;
+            color = ShiftBrightness(color, rough);
+        }
+
+        return color;
     }
 
     private static void ToMemoryColors(Color[] pixels)
@@ -321,11 +373,27 @@ public class RoofRenderer
         return true;
     }
 
+    private static Color LerpColor(Color a, Color b, float t)
+    {
+        t = Math.Clamp(t, 0f, 1f);
+        return new Color(
+            (byte)(a.R + (b.R - a.R) * t),
+            (byte)(a.G + (b.G - a.G) * t),
+            (byte)(a.B + (b.B - a.B) * t));
+    }
+
     private static Color ShiftBrightness(Color c, float shift)
     {
         return new Color(
             (byte)Math.Clamp(c.R + (int)(shift * 255), 0, 255),
             (byte)Math.Clamp(c.G + (int)(shift * 255), 0, 255),
             (byte)Math.Clamp(c.B + (int)(shift * 255), 0, 255));
+    }
+
+    private static int HashPixel(int x, int y, int seed)
+    {
+        int h = x * 374761393 + y * 668265263 + seed * 1274126177;
+        h = (h ^ (h >> 13)) * 1274126177;
+        return h ^ (h >> 16);
     }
 }
