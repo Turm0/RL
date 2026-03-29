@@ -29,13 +29,10 @@ public class FogOfWar
         return _explored[x, y];
     }
 
-    private ushort _viewerZoneId;
-
     public void Compute(int playerX, int playerY, int radius, TileMap map, ushort viewerZoneId = 0)
     {
         _visible.Clear();
         _visited.Clear();
-        _viewerZoneId = viewerZoneId;
 
         MarkVisible(playerX, playerY);
 
@@ -180,7 +177,7 @@ public class FogOfWar
                 if (tileDist <= radius)
                     MarkReached(mapX, mapY, map);
 
-                bool isOpaque = !map.IsInBounds(mapX, mapY) || map.BlocksLightForViewer(mapX, mapY, _viewerZoneId);
+                bool isOpaque = !map.IsInBounds(mapX, mapY) || map.BlocksLight(mapX, mapY);
 
                 if (blocked)
                 {

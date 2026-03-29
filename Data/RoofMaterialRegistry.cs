@@ -16,10 +16,10 @@ public static class RoofMaterialRegistry
         {
             Type = RoofMaterialType.Thatch,
             Name = "Thatch",
-            BaseColor = new Color(145, 120, 65),
-            VariantColorMin = new Color(115, 90, 42),
-            VariantColorMax = new Color(165, 140, 80),
-            MortarColor = new Color(85, 65, 32),
+            BaseColor = new Color(178, 152, 88),
+            VariantColorMin = new Color(158, 132, 72),
+            VariantColorMax = new Color(195, 168, 100),
+            MortarColor = new Color(128, 105, 62),
             RowHeight = 7,
             PieceWidth = 32,
             Staggered = false,
@@ -64,14 +64,30 @@ public static class RoofMaterialRegistry
         {
             Type = RoofMaterialType.WoodShingle,
             Name = "Wood Shingle",
-            BaseColor = new Color(110, 82, 52),
-            VariantColorMin = new Color(85, 62, 38),
-            VariantColorMax = new Color(135, 105, 68),
-            MortarColor = new Color(45, 32, 18),
-            RowHeight = 12,
-            PieceWidth = 9,
+            BaseColor = new Color(145, 115, 78),
+            VariantColorMin = new Color(128, 100, 68),
+            VariantColorMax = new Color(165, 132, 90),
+            MortarColor = new Color(100, 78, 52),
+            RowHeight = 14,
+            PieceWidth = 11,
             Staggered = true,
-            Roughness = 0.03f,
+            Roughness = 0.01f,
+            PixelSize = 2
+        });
+
+        // Cave stone — natural rough rock ceiling
+        Register(new RoofMaterial
+        {
+            Type = RoofMaterialType.CaveStone,
+            Name = "Cave Stone",
+            BaseColor = new Color(82, 76, 68),
+            VariantColorMin = new Color(65, 60, 52),
+            VariantColorMax = new Color(98, 92, 82),
+            MortarColor = new Color(50, 45, 38),
+            RowHeight = 32,  // no visible rows — full tile
+            PieceWidth = 32, // no visible pieces — full tile
+            Staggered = false,
+            Roughness = 0.08f,
             PixelSize = 2
         });
     }

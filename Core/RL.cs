@@ -1,3 +1,4 @@
+using System;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using RoguelikeEngine.Data;
@@ -16,6 +17,7 @@ public class RL : Game
     private TileMap _tileMap;
     private PlayerInputSystem _playerInputSystem;
     private WeatherSystem _weatherSystem;
+    private KeyboardState _prevKeyboard;
 
     public RL()
     {
@@ -37,8 +39,10 @@ public class RL : Game
         _tileMap = CreateDemoLevel();
         _ecsWorld = new DefaultEcs.World();
 
+        var font = Content.Load<Microsoft.Xna.Framework.Graphics.SpriteFont>("DefaultFont");
+
         _renderPipeline = new RenderPipeline();
-        _renderPipeline.Initialize(GraphicsDevice, Window, _tileMap);
+        _renderPipeline.Initialize(GraphicsDevice, Window, _tileMap, font);
 
         SpawnEntities();
 
@@ -210,36 +214,70 @@ public class RL : Game
         for (int y = 11; y <= 17; y++)
             SetFloor(map, 8, y, TerrainId.Dirt);
 
-        // === CAVE (top-right) ===
-        // Cave entrance and tunnels with cave floor and cave walls
-        for (int x = 34; x <= 45; x++)
-            for (int y = 2; y <= 14; y++)
-                SetWall(map, x, y, TerrainId.CaveFloor, WallType.CaveWall);
+        // === CAVE (top-right) — organic shape using distance from center ===
+        ushort caveZone = 3;
+        int caveCX = 40, caveCY = 9; // cave center
+        int caveRadius = 7;
+        int caveBoundsX1 = caveCX - caveRadius - 1;
+        int caveBoundsY1 = caveCY - caveRadius - 1;
+        int caveBoundsW = caveRadius * 2 + 3;
+        int caveBoundsH = caveRadius * 2 + 3;
 
-        // Cave rooms
-        for (int x = 35; x <= 44; x++)
-            for (int y = 3; y <= 5; y++)
-                SetFloor(map, x, y, TerrainId.CaveFloor);
-        for (int x = 35; x <= 38; x++)
-            for (int y = 6; y <= 13; y++)
-                SetFloor(map, x, y, TerrainId.CaveFloor);
-        for (int x = 39; x <= 44; x++)
-            for (int y = 8; y <= 13; y++)
-                SetFloor(map, x, y, TerrainId.CaveFloor);
-        // Connecting corridor
-        for (int x = 39; x <= 40; x++)
-            for (int y = 5; y <= 8; y++)
-                SetFloor(map, x, y, TerrainId.CaveFloor);
+        map.RegisterZone(new ZoneDefinition
+        {
+            Id = caveZone,
+            HasRoof = true,
+            RoofMaterial = RoofMaterialType.CaveStone,
+            Bounds = new Rectangle(caveBoundsX1, caveBoundsY1, caveBoundsW, caveBoundsH)
+        });
 
-        // Cave entrance connects to outdoor at y=5
-        for (int x = 27; x <= 34; x++)
-            SetFloor(map, x, 4, TerrainId.Dirt);
-        SetFloor(map, 34, 4, TerrainId.CaveFloor);
+        // First fill the area with cave walls
+        for (int x = caveBoundsX1; x < caveBoundsX1 + caveBoundsW; x++)
+            for (int y = caveBoundsY1; y < caveBoundsY1 + caveBoundsH; y++)
+                if (map.IsInBounds(x, y))
+                    SetWall(map, x, y, TerrainId.CaveFloor, WallType.CaveWall);
 
-        // Lava pool in deep cave
+        // Carve organic cave shape using noise-perturbed distance
+        for (int x = caveBoundsX1; x < caveBoundsX1 + caveBoundsW; x++)
+        {
+            for (int y = caveBoundsY1; y < caveBoundsY1 + caveBoundsH; y++)
+            {
+                if (!map.IsInBounds(x, y)) continue;
+                float dx = x - caveCX;
+                float dy = y - caveCY;
+                float dist = MathF.Sqrt(dx * dx + dy * dy);
+
+                // Noise-perturbed radius for organic shape
+                int h = TileMap.ComputeVariantSeed(x, y);
+                float noise = ((h & 0xFF) / 255f - 0.5f) * 3f; // ±1.5 tile wobble
+                float effectiveRadius = caveRadius + noise;
+
+                if (dist < effectiveRadius)
+                    SetFloor(map, x, y, TerrainId.CaveFloor, caveZone);
+            }
+        }
+
+        // Cave entrance — winding tunnel to the west
+        for (int x = 27; x <= caveCX - caveRadius + 2; x++)
+        {
+            int tunnelY = 5 + (int)(MathF.Sin(x * 0.5f) * 1.2f);
+            SetFloor(map, x, tunnelY, TerrainId.CaveFloor, caveZone);
+            SetFloor(map, x, tunnelY + 1, TerrainId.CaveFloor, caveZone);
+            // Cave walls around tunnel
+            if (map.IsInBounds(x, tunnelY - 1) && !map.GetTile(x, tunnelY - 1).HasWall)
+                SetWall(map, x, tunnelY - 1, TerrainId.CaveFloor, WallType.CaveWall);
+            if (map.IsInBounds(x, tunnelY + 2) && !map.GetTile(x, tunnelY + 2).HasWall)
+                SetWall(map, x, tunnelY + 2, TerrainId.CaveFloor, WallType.CaveWall);
+        }
+        // Connect entrance to dirt path
+        for (int x = 25; x <= 27; x++)
+            SetFloor(map, x, 5, TerrainId.Dirt);
+
+        // Lava pool in deep cave (southeast area)
         for (int x = 42; x <= 44; x++)
             for (int y = 10; y <= 12; y++)
-                SetFloor(map, x, y, TerrainId.Lava);
+                if (!map.GetTile(x, y).HasWall)
+                    SetFloor(map, x, y, TerrainId.Lava, caveZone);
 
         // === TAVERN (bottom-right, zone 2 with stone tile roof) ===
         ushort tavernZone = 2;
@@ -303,14 +341,21 @@ public class RL : Game
 
     protected override void Update(GameTime gameTime)
     {
-        if (Keyboard.GetState().IsKeyDown(Keys.Escape))
+        var kb = Keyboard.GetState();
+
+        if (kb.IsKeyDown(Keys.Escape))
             Exit();
+
+        // L key: cycle ambient light mode
+        if (kb.IsKeyDown(Keys.L) && !_prevKeyboard.IsKeyDown(Keys.L))
+            _renderPipeline.Lighting.CycleAmbient();
 
         _playerInputSystem.Update(gameTime);
         _renderPipeline.Update(gameTime);
         _weatherSystem?.Update(gameTime);
         UpdatePlayerFov();
 
+        _prevKeyboard = kb;
         base.Update(gameTime);
     }
 

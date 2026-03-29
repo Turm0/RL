@@ -37,7 +37,8 @@ public class RoofRenderer
         }
     }
 
-    public void Draw(SpriteBatch spriteBatch, TileMap map, Camera camera, FogOfWar fow)
+    public void Draw(SpriteBatch spriteBatch, TileMap map, Camera camera, FogOfWar fow,
+        Vector3 ambientColor)
     {
         int tileSize = GameConfig.TileSize;
         var visibleRect = camera.GetVisibleTileRect(tileSize);
@@ -49,7 +50,11 @@ public class RoofRenderer
             if (alpha <= 0.01f) continue;
 
             int alphaByte = (int)(alpha * 255);
-            var tint = new Color(255, 255, 255, alphaByte);
+            // Tint roof by ambient light — bright in daylight, dark at night
+            int ar = (int)(ambientColor.X * 255);
+            int ag = (int)(ambientColor.Y * 255);
+            int ab = (int)(ambientColor.Z * 255);
+            var tint = new Color(ar, ag, ab, alphaByte);
 
             // A roof looks "normal" (not memory) if the player can see any wall of the building.
             // Since FOV can't penetrate walls, roof tiles are technically never visible,
@@ -74,20 +79,26 @@ public class RoofRenderer
                     bool useNormalColor = roofSeen || fow.IsVisible(x, y);
                     DoorEdge doorEdge = inZone ? DetectDoorEdge(map, x, y, zone.Id) : DoorEdge.None;
 
-                    var cacheKey = $"roof_{(byte)zone.RoofMaterial}_{ComputeVariantSeed(x, y)}_{(int)doorEdge}";
+                    // Position relative to zone center (for ridge shading)
+                    float zoneRelX = (zone.Bounds.Width > 1)
+                        ? (x - zone.Bounds.X) / (float)(zone.Bounds.Width - 1) : 0.5f;
+                    float zoneRelY = (zone.Bounds.Height > 1)
+                        ? (y - zone.Bounds.Y) / (float)(zone.Bounds.Height - 1) : 0.5f;
+
+                    var cacheKey = $"roof_{(byte)zone.RoofMaterial}_{ComputeVariantSeed(x, y)}_{(int)doorEdge}_{(int)(zoneRelX*10)}_{(int)(zoneRelY*10)}";
 
                     Texture2D texture;
                     if (useNormalColor)
                     {
                         texture = _cache.GetOrCreate(cacheKey, () =>
-                            GenerateRoofTile(spriteBatch.GraphicsDevice, zone, x, y, doorEdge));
+                            GenerateRoofTile(spriteBatch.GraphicsDevice, zone, x, y, doorEdge, zoneRelX, zoneRelY));
                     }
                     else
                     {
                         string memKey = "mem_" + cacheKey;
                         texture = _memoryCache.GetOrCreate(memKey, () =>
                         {
-                            var pixels = GenerateRoofPixels(zone, x, y, doorEdge);
+                            var pixels = GenerateRoofPixels(zone, x, y, doorEdge, zoneRelX, zoneRelY);
                             ToMemoryColors(pixels);
                             var tex = new Texture2D(spriteBatch.GraphicsDevice, GameConfig.TileSize, GameConfig.TileSize);
                             tex.SetData(pixels);
@@ -193,15 +204,16 @@ public class RoofRenderer
     // --- Texture generation ---
 
     private Texture2D GenerateRoofTile(GraphicsDevice device, ZoneDefinition zone,
-        int worldX, int worldY, DoorEdge doorEdge)
+        int worldX, int worldY, DoorEdge doorEdge, float zoneRelX = 0.5f, float zoneRelY = 0.5f)
     {
-        var pixels = GenerateRoofPixels(zone, worldX, worldY, doorEdge);
+        var pixels = GenerateRoofPixels(zone, worldX, worldY, doorEdge, zoneRelX, zoneRelY);
         var tex = new Texture2D(device, GameConfig.TileSize, GameConfig.TileSize);
         tex.SetData(pixels);
         return tex;
     }
 
-    private Color[] GenerateRoofPixels(ZoneDefinition zone, int worldX, int worldY, DoorEdge doorEdge)
+    private Color[] GenerateRoofPixels(ZoneDefinition zone, int worldX, int worldY,
+        DoorEdge doorEdge, float zoneRelX = 0.5f, float zoneRelY = 0.5f)
     {
         int size = GameConfig.TileSize;
         var pixels = new Color[size * size];
@@ -221,6 +233,22 @@ public class RoofRenderer
             }
         }
 
+        // Ridge shading: center of roof is the peak (lighter), edges are eaves (darker)
+        // Also north side slightly lighter (facing light), south side slightly darker
+        float distFromCenterX = Math.Abs(zoneRelX - 0.5f) * 2f; // 0 at center, 1 at edge
+        float distFromCenterY = Math.Abs(zoneRelY - 0.5f) * 2f;
+        float edgeDist = Math.Max(distFromCenterX, distFromCenterY);
+        float ridgeShade = -edgeDist * 0.12f; // darken up to 12% at edges
+        // North-south bias: top of roof slightly brighter
+        float nsBias = (zoneRelY - 0.5f) * 0.08f; // north=+4%, south=-4%
+
+        if (ridgeShade != 0f || nsBias != 0f)
+        {
+            float totalShade = ridgeShade - nsBias;
+            for (int i = 0; i < pixels.Length; i++)
+                pixels[i] = ShiftBrightness(pixels[i], totalShade);
+        }
+
         PixelUtil.Pixelize(pixels, size, mat.PixelSize);
 
         return pixels;
@@ -228,6 +256,10 @@ public class RoofRenderer
 
     private static Color SampleRoofPixel(RoofMaterial mat, int seed, int px, int py)
     {
+        // Cave stone: rough rocky texture, no shingle pattern
+        if (mat.Type == RoofMaterialType.CaveStone)
+            return SampleCaveStone(mat, seed, px, py);
+
         int rowH = mat.RowHeight;
         int pieceW = mat.PieceWidth;
 
@@ -245,44 +277,45 @@ public class RoofRenderer
 
         // --- Curved bottom edge with per-pixel noise for irregular/pixelated look ---
         float centerT = Math.Abs(localX - pieceW / 2f) / (pieceW / 2f);
-        int edgeNoise = (HashPixel(localX, row, pieceSeed + 123) & 3) - 1; // -1 to 2
-        int curveHeight = rowH - 1 - (int)(centerT * centerT * 3) + edgeNoise;
+        int edgeNoise = (HashPixel(localX, row, pieceSeed + 123) & 1);
+        int curveHeight = rowH - 1 - (int)(centerT * centerT * 4) + edgeNoise;
         curveHeight = Math.Clamp(curveHeight, 2, rowH - 1);
 
         bool belowCurve = localY > curveHeight;
 
-        // --- Vertical gap: irregular width (0-1px jitter per row) ---
-        if (pieceW < 32)
+        // --- Vertical gap between shingles: subtle darkening, not a hard line ---
+        if (pieceW < 32 && localX == 0)
         {
-            int gapJitter = (HashPixel(pieceCol, row, seed + 999) & 1); // 0 or 1
-            if (localX <= gapJitter)
-                return mat.MortarColor;
+            // Sample the shingle color but darken slightly instead of using mortar color
+            float gt = 0.3f + ((pieceSeed & 0xFF) / 255f) * 0.4f;
+            var gapColor = LerpColor(mat.VariantColorMin, mat.VariantColorMax, gt);
+            return ShiftBrightness(gapColor, -0.06f);
         }
 
         if (belowCurve)
         {
+            // Below the curve: the next row's shingle peeks through, visibly darker
             int nextRowPieceSeed = HashPixel(pieceCol, row + 1, seed + 555);
-            float nt = ((nextRowPieceSeed & 0xFFFF) % 1000) / 999f;
+            float nt = 0.3f + ((nextRowPieceSeed & 0xFF) / 255f) * 0.4f;
             var behindColor = LerpColor(mat.VariantColorMin, mat.VariantColorMax, nt);
             return ShiftBrightness(behindColor, -0.10f);
         }
 
-        // --- Overlap shadow at top: irregular (1-2px, varies per shingle) ---
-        int shadowDepth = 1 + ((pieceSeed >> 12) & 1); // 1 or 2
-        if (localY < shadowDepth && mat.Staggered)
-            return ShiftBrightness(mat.MortarColor, 0.05f);
+        // --- Overlap shadow at top of row: soft, 1px ---
+        if (localY == 0 && mat.Staggered)
+        {
+            float st = 0.3f + ((pieceSeed & 0xFF) / 255f) * 0.4f;
+            var shadowColor = LerpColor(mat.VariantColorMin, mat.VariantColorMax, st);
+            return ShiftBrightness(shadowColor, -0.04f);
+        }
 
         // --- Shingle face color ---
-        float t = ((pieceSeed & 0xFFFF) % 1000) / 999f;
+        // Narrow the range so adjacent shingles don't contrast too much
+        float t = 0.3f + ((pieceSeed & 0xFF) / 255f) * 0.4f; // 0.3..0.7 range
         var color = LerpColor(mat.VariantColorMin, mat.VariantColorMax, t);
 
-        // Subtle vertical grain
-        int grainH = HashPixel(localX, py / 3, pieceSeed);
-        float grain = ((grainH & 0xFF) / 255f - 0.5f) * 0.04f;
-        color = ShiftBrightness(color, grain);
-
-        // Slight darkening toward bottom of each shingle (depth)
-        float yFade = (float)localY / curveHeight * 0.05f;
+        // Very subtle darkening toward bottom
+        float yFade = (float)localY / curveHeight * 0.03f;
         color = ShiftBrightness(color, -yFade);
 
         // Per-pixel roughness
@@ -371,6 +404,30 @@ public class RoofRenderer
         // Interior: dark void
         result = DoorDarkColor;
         return true;
+    }
+
+    private static Color SampleCaveStone(RoofMaterial mat, int seed, int px, int py)
+    {
+        // Multi-scale rocky noise using hash
+        int h1 = HashPixel(px / 6, py / 6, seed + 111); // large rock patches
+        int h2 = HashPixel(px / 3, py / 3, seed + 222); // medium detail
+        int h3 = HashPixel(px, py, seed + 333);          // fine grain
+
+        float large = ((h1 & 0xFF) / 255f - 0.5f) * 0.14f;
+        float medium = ((h2 & 0xFF) / 255f - 0.5f) * 0.08f;
+        float fine = ((h3 & 0xFF) / 255f - 0.5f) * 0.04f;
+
+        // Base color with per-tile variation
+        float t = 0.3f + ((HashPixel(0, 0, seed) & 0xFF) / 255f) * 0.4f;
+        var color = LerpColor(mat.VariantColorMin, mat.VariantColorMax, t);
+
+        color = ShiftBrightness(color, large + medium + fine);
+
+        // Occasional dark crevice pixels
+        if ((h3 & 0x3F) == 0)
+            color = ShiftBrightness(color, -0.08f);
+
+        return color;
     }
 
     private static Color LerpColor(Color a, Color b, float t)

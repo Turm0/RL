@@ -20,7 +20,30 @@ public class LightingSystem
 
     private readonly HashSet<long> _visited = new();
 
-    private readonly Vector3 _ambientColor = new(0.22f, 0.20f, 0.24f);
+    private Vector3 _ambientColor = new(0.22f, 0.20f, 0.24f);
+    private int _ambientMode = 0;
+
+    private static readonly (string Name, Vector3 Color)[] AmbientModes =
+    {
+        ("Night",         new Vector3(0.08f, 0.07f, 0.12f)),
+        ("Moonlit",       new Vector3(0.15f, 0.15f, 0.22f)),
+        ("Dawn",          new Vector3(0.35f, 0.25f, 0.22f)),
+        ("Morning",       new Vector3(0.55f, 0.50f, 0.42f)),
+        ("Day",           new Vector3(0.98f, 0.95f, 0.90f)),
+        ("Overcast",      new Vector3(0.50f, 0.50f, 0.52f)),
+        ("Sunset",        new Vector3(0.50f, 0.32f, 0.20f)),
+        ("Dusk",          new Vector3(0.25f, 0.20f, 0.25f)),
+        ("Torchlight",    new Vector3(0.12f, 0.10f, 0.08f)),
+    };
+
+    public string CurrentAmbientName => AmbientModes[_ambientMode].Name;
+    public Vector3 AmbientColor => _ambientColor;
+
+    public void CycleAmbient()
+    {
+        _ambientMode = (_ambientMode + 1) % AmbientModes.Length;
+        _ambientColor = AmbientModes[_ambientMode].Color;
+    }
 
     private readonly BlendState _multiplyBlend = new()
     {
@@ -52,20 +75,49 @@ public class LightingSystem
         _lightRT = new RenderTarget2D(device, _bufferWidth, _bufferHeight);
     }
 
-    public void BeginFrame(Rectangle visibleRect)
+    // Indoor ambient: dim baseline that doesn't change with time of day
+    private static readonly Vector3 IndoorAmbient = new(0.10f, 0.09f, 0.11f);
+
+    public void BeginFrame(Rectangle visibleRect, TileMap map)
     {
         _visibleRect = visibleRect;
-        for (int i = 0; i < _lightBuffer.Length; i += 3)
+
+        for (int ty = 0; ty < visibleRect.Height; ty++)
         {
-            _lightBuffer[i + 0] = _ambientColor.X;
-            _lightBuffer[i + 1] = _ambientColor.Y;
-            _lightBuffer[i + 2] = _ambientColor.Z;
+            for (int tx = 0; tx < visibleRect.Width; tx++)
+            {
+                int mapX = visibleRect.X + tx;
+                int mapY = visibleRect.Y + ty;
+
+                // Check if tile is under a roof — use indoor ambient instead
+                bool isIndoor = false;
+                if (map.IsInBounds(mapX, mapY))
+                {
+                    ushort zoneId = map.GetZoneId(mapX, mapY);
+                    if (zoneId != 0)
+                    {
+                        var zone = map.GetZone(zoneId);
+                        if (zone != null && zone.HasRoof)
+                            isIndoor = true;
+                    }
+                }
+
+                var ambient = isIndoor ? IndoorAmbient : _ambientColor;
+
+                // Fill all sub-tile pixels for this tile
+                int subX0 = tx * SubTileRes;
+                int subY0 = ty * SubTileRes;
+                for (int sy = 0; sy < SubTileRes; sy++)
+                    for (int sx = 0; sx < SubTileRes; sx++)
+                    {
+                        int idx = ((subY0 + sy) * _bufferWidth + subX0 + sx) * 3;
+                        _lightBuffer[idx + 0] = ambient.X;
+                        _lightBuffer[idx + 1] = ambient.Y;
+                        _lightBuffer[idx + 2] = ambient.Z;
+                    }
+            }
         }
     }
-
-    private ushort _viewerZoneId;
-
-    public void SetViewerZone(ushort zoneId) => _viewerZoneId = zoneId;
 
     public void AddLight(int tileX, int tileY, float radius, float intensity,
         Vector3 color, TileMap map, float time, bool flicker, float flickerIntensity, int flickerSeed)
@@ -75,10 +127,12 @@ public class LightingSystem
         {
             float phase1 = flickerSeed * 1.7f;
             float phase2 = flickerSeed * 2.3f;
-            flickerMod = 1f - flickerIntensity * MathF.Sin(time * 4f + phase1) * MathF.Sin(time * 7f + phase2) * 0.5f;
+            // Gentle waver: two slow sines added, not multiplied — avoids sharp on/off beats
+            flickerMod = 1f - flickerIntensity * (MathF.Sin(time * 3f + phase1) * 0.4f + MathF.Sin(time * 5f + phase2) * 0.25f);
         }
 
         float effectiveIntensity = intensity * flickerMod;
+
         float lightCenterX = tileX + 0.5f;
         float lightCenterY = tileY + 0.5f;
 
@@ -88,6 +142,46 @@ public class LightingSystem
 
         for (int octant = 0; octant < 8; octant++)
             CastOctant(map, tileX, tileY, lightCenterX, lightCenterY, radius, effectiveIntensity, color, octant, 1, 1f, 0f);
+    }
+
+    /// <summary>
+    /// Applies a 3x3 box blur to the light buffer to soften shadow edges.
+    /// </summary>
+    public void BlurBuffer()
+    {
+        var temp = new float[_lightBuffer.Length];
+
+        for (int y = 0; y < _bufferHeight; y++)
+        {
+            for (int x = 0; x < _bufferWidth; x++)
+            {
+                float r = 0, g = 0, b = 0;
+                int count = 0;
+
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    int ny = y + dy;
+                    if (ny < 0 || ny >= _bufferHeight) continue;
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int nx = x + dx;
+                        if (nx < 0 || nx >= _bufferWidth) continue;
+                        int idx = (ny * _bufferWidth + nx) * 3;
+                        r += _lightBuffer[idx];
+                        g += _lightBuffer[idx + 1];
+                        b += _lightBuffer[idx + 2];
+                        count++;
+                    }
+                }
+
+                int outIdx = (y * _bufferWidth + x) * 3;
+                temp[outIdx] = r / count;
+                temp[outIdx + 1] = g / count;
+                temp[outIdx + 2] = b / count;
+            }
+        }
+
+        Array.Copy(temp, _lightBuffer, _lightBuffer.Length);
     }
 
     public void BuildTexture(GraphicsDevice device, FogOfWar fow)
@@ -149,7 +243,7 @@ public class LightingSystem
         if (!map.IsInBounds(tileX, tileY))
             return;
 
-        bool isWall = map.BlocksLightForViewer(tileX, tileY, _viewerZoneId);
+        bool isWall = map.BlocksLight(tileX, tileY);
 
         if (isWall && !HasNonWallNeighbor(map, tileX, tileY))
             return;
@@ -225,7 +319,7 @@ public class LightingSystem
                 if (tileDist <= radius)
                     LightTile(mapX, mapY, lightCX, lightCY, radius, intensity, color, map);
 
-                bool isOpaque = !map.IsInBounds(mapX, mapY) || map.BlocksLightForViewer(mapX, mapY, _viewerZoneId);
+                bool isOpaque = !map.IsInBounds(mapX, mapY) || map.BlocksLight(mapX, mapY);
 
                 if (blocked)
                 {
@@ -260,6 +354,6 @@ public class LightingSystem
 
     private bool IsNonWall(TileMap map, int x, int y)
     {
-        return map.IsInBounds(x, y) && !map.BlocksLightForViewer(x, y, _viewerZoneId);
+        return map.IsInBounds(x, y) && !map.BlocksLight(x, y);
     }
 }

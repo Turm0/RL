@@ -7,7 +7,8 @@ public enum RoofMaterialType : byte
     Thatch,
     ClayTile,
     Slate,
-    WoodShingle
+    WoodShingle,
+    CaveStone
 }
 
 public class RoofMaterial

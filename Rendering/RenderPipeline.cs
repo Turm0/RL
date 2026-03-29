@@ -18,18 +18,21 @@ public class RenderPipeline
     private SpriteBatch _spriteBatch;
     private GraphicsDevice _graphicsDevice;
     private GameWindow _window;
+    private SpriteFont _font;
 
-    private const int FovRadius = 30;
+    private const int FovRadius = 60;
 
     public Camera Camera => _camera;
     public FogOfWar FogOfWar => _fogOfWar;
     public EffectOverlayRenderer EffectOverlay => _effectOverlayRenderer;
+    public LightingSystem Lighting => _lightingSystem;
 
-    public void Initialize(GraphicsDevice graphicsDevice, GameWindow window, TileMap map)
+    public void Initialize(GraphicsDevice graphicsDevice, GameWindow window, TileMap map, SpriteFont font)
     {
         _graphicsDevice = graphicsDevice;
         _window = window;
         _spriteBatch = new SpriteBatch(graphicsDevice);
+        _font = font;
 
         _camera = new Camera
         {
@@ -90,15 +93,13 @@ public class RenderPipeline
 
         // Compute lighting
         _lightingSystem.Resize(visibleRect.Width, visibleRect.Height, _graphicsDevice);
-        _lightingSystem.BeginFrame(visibleRect);
-        _lightingSystem.SetViewerZone(playerZoneId);
+        _lightingSystem.BeginFrame(visibleRect, map);
 
         using var lights = ecsWorld.GetEntities()
             .With<Position>()
             .With<LightEmitter>()
             .AsSet();
 
-        int seed = 0;
         foreach (ref readonly var entity in lights.GetEntities())
         {
             ref readonly var pos = ref entity.Get<Position>();
@@ -108,16 +109,16 @@ public class RenderPipeline
                 pos.TileX - (int)light.Radius >= visibleRect.X + visibleRect.Width ||
                 pos.TileY + (int)light.Radius < visibleRect.Y ||
                 pos.TileY - (int)light.Radius >= visibleRect.Y + visibleRect.Height)
-            {
-                seed++;
                 continue;
-            }
+
+            // Stable flicker seed from position — small range so Sin() stays precise
+            int flickerSeed = ((pos.TileX * 7 + pos.TileY * 13) & 0xFF);
 
             _lightingSystem.AddLight(pos.TileX, pos.TileY, light.Radius, light.Intensity,
-                light.Color, map, time, light.Flicker, light.FlickerIntensity, seed);
-            seed++;
+                light.Color, map, time, light.Flicker, light.FlickerIntensity, flickerSeed);
         }
 
+        _lightingSystem.BlurBuffer();
         _lightingSystem.BuildTexture(_graphicsDevice, _fogOfWar);
 
         // Draw scene
@@ -140,7 +141,17 @@ public class RenderPipeline
 
         // 4. Roofs on top of everything
         _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
-        _roofRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar);
+        _roofRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar, _lightingSystem.AmbientColor);
         _spriteBatch.End();
+
+        // 5. HUD
+        if (_font != null)
+        {
+            _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
+            string text = $"Light: {_lightingSystem.CurrentAmbientName} [L]";
+            _spriteBatch.DrawString(_font, text, new Vector2(12, 12), Color.Black);
+            _spriteBatch.DrawString(_font, text, new Vector2(10, 10), Color.White);
+            _spriteBatch.End();
+        }
     }
 }
