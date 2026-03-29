@@ -54,7 +54,8 @@ public class TerrainRenderer
 
                 Texture2D texture;
 
-                bool isAnimated = visible && TerrainTextureGenerator.IsLiquid(tile.Terrain);
+                bool isAnimated = visible && (TerrainTextureGenerator.IsLiquid(tile.Terrain)
+                    || HasLiquidNeighbor(neighbors));
 
                 if (isAnimated)
                 {
@@ -92,4 +93,11 @@ public class TerrainRenderer
         return frames[frame];
     }
 
+    private static bool HasLiquidNeighbor(NeighborContext n)
+    {
+        return TerrainTextureGenerator.IsLiquid(n.N) || TerrainTextureGenerator.IsLiquid(n.S) ||
+               TerrainTextureGenerator.IsLiquid(n.E) || TerrainTextureGenerator.IsLiquid(n.W) ||
+               TerrainTextureGenerator.IsLiquid(n.NE) || TerrainTextureGenerator.IsLiquid(n.NW) ||
+               TerrainTextureGenerator.IsLiquid(n.SE) || TerrainTextureGenerator.IsLiquid(n.SW);
+    }
 }

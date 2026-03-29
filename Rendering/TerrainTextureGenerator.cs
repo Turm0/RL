@@ -31,9 +31,247 @@ public class TerrainTextureGenerator
         else
             GenerateTerrain(pixels, tile);
 
+        // Organic terrain blending: neighbor terrain replaces edge pixels with noise-shaped mask
+        if (!tile.HasWall)
+            BlendTerrainEdgesWorld(pixels, tile, neighbors, worldX, worldY, animFrame);
+
         var texture = new Texture2D(device, Size, Size);
         texture.SetData(pixels);
         return texture;
+    }
+
+    /// <summary>
+    /// Organic terrain blending. For each neighbor with different terrain,
+    /// noise-shaped mask determines which edge pixels get replaced with the neighbor's pattern.
+    /// Creates natural irregular borders instead of hard tile edges.
+    /// </summary>
+    // Direction vectors: N, NE, E, SE, S, SW, W, NW
+    private static readonly int[] DirX = { 0, 1, 1, 1, 0, -1, -1, -1 };
+    private static readonly int[] DirY = { -1, -1, 0, 1, 1, 1, 0, -1 };
+
+    /// <summary>
+    /// For each pixel, check all neighbors. The highest-priority neighbor terrain
+    /// that encroaches past its noise-shaped threshold WINS that pixel entirely.
+    /// No layered blending — one terrain per pixel.
+    /// </summary>
+    private void BlendTerrainEdgesWorld(Color[] pixels, TileData tile, NeighborContext neighbors,
+        int worldX, int worldY, int animFrame = 0)
+    {
+        var thisDef = TerrainRegistry.Get(tile.Terrain);
+        int thisPri = thisDef.TransitionPriority;
+
+        var nTerrain = new TerrainId[] { neighbors.N, neighbors.NE, neighbors.E, neighbors.SE,
+            neighbors.S, neighbors.SW, neighbors.W, neighbors.NW };
+        var nWall = new bool[] { neighbors.WallN, neighbors.WallNE, neighbors.WallE, neighbors.WallSE,
+            neighbors.WallS, neighbors.WallSW, neighbors.WallW, neighbors.WallNW };
+
+        for (int py = 0; py < Size; py++)
+        {
+            for (int px = 0; px < Size; px++)
+            {
+                int wpx = worldX * Size + px;
+                int wpy = worldY * Size + py;
+
+                int bestDir = -1;
+                int bestPri = thisPri;
+                float bestStrength = 0f;
+
+                for (int d = 0; d < 8; d++)
+                {
+                    if (nWall[d]) continue;
+                    if (nTerrain[d] == tile.Terrain) continue;
+
+                    var nDef = TerrainRegistry.Get(nTerrain[d]);
+                    if (nDef.TransitionPriority <= thisPri) continue;
+
+                    bool isDiag = (d & 1) != 0;
+                    int maxDepth = isDiag ? 8 : 12;
+
+                    float dist = DistToEdge(px, py, DirX[d], DirY[d]);
+
+                    int nh1 = HashPixel(wpx / 4, wpy / 4, 8888 + (int)nTerrain[d] * 31);
+                    int nh2 = HashPixel(wpx / 8, wpy / 8, 9999 + (int)nTerrain[d] * 17);
+                    float noise = ((nh1 & 0xFF) / 255f - 0.5f) * 6f
+                                + ((nh2 & 0xFF) / 255f - 0.5f) * 8f;
+                    float threshold = maxDepth + noise;
+
+                    if (dist < threshold)
+                    {
+                        float strength = 1f - (dist / threshold);
+                        if (nDef.TransitionPriority > bestPri ||
+                            (nDef.TransitionPriority == bestPri && strength > bestStrength))
+                        {
+                            bestDir = d;
+                            bestPri = nDef.TransitionPriority;
+                            bestStrength = strength;
+                        }
+                    }
+                }
+
+                if (bestDir >= 0)
+                {
+                    Color winnerColor;
+
+                    if (IsLiquid(nTerrain[bestDir]))
+                    {
+                        float depth = _map != null
+                            ? _map.GetInterpolatedWaterDepth(worldX, worldY, px, py)
+                            : 0.2f;
+                        depth = Math.Min(depth, bestStrength * 0.5f);
+
+                        if (nTerrain[bestDir] == TerrainId.Lava)
+                        {
+                            // Lava: same cellular blob animation as real lava tiles
+                            var lavaDef = TerrainRegistry.Get(TerrainId.Lava);
+                            float frameT = (float)animFrame / 8;
+                            winnerColor = SampleLavaPixel(lavaDef, tile.VariantSeed, px, py,
+                                frameT, bestStrength);
+                        }
+                        else
+                        {
+                            // Water: depth + shimmer animation
+                            var style = WaterStyleRegistry.Get(tile.WaterStyle);
+                            winnerColor = LerpColor(style.ShallowColor, style.DeepColor, depth);
+                            int h = HashPixel(px, py, tile.VariantSeed + 100);
+                            int pixelPhase = h & 7;
+                            float pixelBright = ((h >> 3) & 0xFF) / 255f;
+                            if (pixelPhase == (animFrame % 8))
+                                winnerColor = ShiftBrightness(winnerColor, pixelBright * 0.07f);
+                            else
+                                winnerColor = ShiftBrightness(winnerColor, pixelBright * 0.02f);
+                        }
+
+                        // Stones poking through on the water side of the shore
+                        if (bestStrength > 0.6f && nTerrain[bestDir] != TerrainId.Lava)
+                        {
+                            int shoreStone = HashPixel(wpx / 6, wpy / 6, 7070);
+                            if ((shoreStone & 0xF) == 0)
+                            {
+                                int s = 65 + ((shoreStone >> 4) & 0x1F);
+                                winnerColor = new Color(s, s, s);
+                                if ((wpy % 6) < 2)
+                                    winnerColor = ShiftBrightness(winnerColor, 0.06f);
+                            }
+                        }
+
+                        // Edge effects at the boundary
+                        if (bestStrength > 0.15f && bestStrength < 0.5f)
+                        {
+                            float edgeT = 1f - Math.Abs(bestStrength - 0.32f) / 0.17f;
+                            if (edgeT > 0f)
+                            {
+                                if (nTerrain[bestDir] == TerrainId.Lava)
+                                {
+                                    winnerColor = LerpColor(winnerColor, new Color(220, 140, 30),
+                                        edgeT * 0.5f);
+                                }
+                                else
+                                {
+                                    // Water: foam + scattered gray stones with highlights
+                                    int stoneHash = HashPixel(wpx / 6, wpy / 6, 4444);
+                                    int bigStoneHash = HashPixel(wpx / 10, wpy / 10, 6666);
+                                    if ((bigStoneHash & 0xF) == 0) // ~6% large stones
+                                    {
+                                        int shade = 55 + ((bigStoneHash >> 4) & 0x1F);
+                                        winnerColor = new Color(shade, shade, shade);
+                                        // Top highlight
+                                        if ((wpy % 10) < 3)
+                                            winnerColor = ShiftBrightness(winnerColor, 0.08f);
+                                    }
+                                    else if ((stoneHash & 0x7) == 0) // ~12% regular stones
+                                    {
+                                        int shade = 60 + ((stoneHash >> 3) & 0x1F);
+                                        winnerColor = new Color(shade, shade, shade);
+                                        if ((wpy % 6) < 2)
+                                            winnerColor = ShiftBrightness(winnerColor, 0.06f);
+                                    }
+                                    else
+                                    {
+                                        winnerColor = LerpColor(winnerColor,
+                                            new Color(170, 185, 180), edgeT * 0.4f);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var winnerDef = TerrainRegistry.Get(nTerrain[bestDir]);
+                        int winnerSeed = tile.VariantSeed ^ (winnerDef.Id.GetHashCode() * 7919);
+                        winnerColor = SampleTerrain(winnerDef, winnerSeed, px, py);
+                    }
+
+                    float blend = bestStrength > 0.3f ? 1f : bestStrength / 0.3f;
+                    int idx = py * Size + px;
+                    pixels[idx] = LerpColor(pixels[idx], winnerColor, blend);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Samples a single lava pixel using the same cellular pattern as GenerateLava.
+    /// </summary>
+    private static Color SampleLavaPixel(TerrainDefinition def, int seed, int px, int py,
+        float frameT, float intensity)
+    {
+        int cellCount = 20;
+        float minDist = float.MaxValue;
+        float minDist2 = float.MaxValue;
+        float nearestShade = 0f;
+
+        for (int i = 0; i < cellCount; i++)
+        {
+            int ch = HashPixel(i * 17, i * 31, seed + 900 + i);
+            float cx = (ch & 0xFF) / 255f * Size;
+            float cy = ((ch >> 8) & 0xFF) / 255f * Size;
+            float drift = frameT * MathF.PI * 2f;
+            cx += MathF.Sin(drift + i * 2.1f) * 1f;
+            cy += MathF.Cos(drift + i * 1.7f) * 1f;
+
+            float dx = px - cx, dy = py - cy;
+            float dist = dx * dx + dy * dy;
+            if (dist < minDist)
+            {
+                minDist2 = minDist;
+                minDist = dist;
+                nearestShade = ((ch >> 16) & 0xFF) / 255f;
+            }
+            else if (dist < minDist2)
+                minDist2 = dist;
+        }
+
+        minDist = MathF.Sqrt(minDist);
+        minDist2 = MathF.Sqrt(minDist2);
+        float edgeFactor = minDist / (minDist + minDist2 + 0.01f);
+
+        float t = nearestShade * 0.4f + 0.3f;
+        var color = LerpColor(def.VariantColorMin, def.VariantColorMax, t);
+
+        float edgeDarken = edgeFactor > 0.40f ? (edgeFactor - 0.40f) * 2f : 0f;
+        color = ShiftBrightness(color, -edgeDarken * 0.18f);
+
+        float centerBright = Math.Max(0f, 0.33f - edgeFactor) * 0.5f;
+        color = LerpColor(color, new Color(240, 140, 30), centerBright);
+
+        // Fade toward edge of blend zone
+        color = ShiftBrightness(color, -(1f - intensity) * 0.1f);
+
+        return color;
+    }
+
+    private static float DistToEdge(int px, int py, int dirX, int dirY)
+    {
+        if (dirX != 0 && dirY != 0)
+        {
+            // Diagonal: distance to the corner, not just nearest edge
+            float dx = dirX > 0 ? Size - 1 - px : px;
+            float dy = dirY > 0 ? Size - 1 - py : py;
+            return MathF.Sqrt(dx * dx + dy * dy);
+        }
+        if (dirX != 0)
+            return dirX > 0 ? Size - 1 - px : px;
+        return dirY > 0 ? Size - 1 - py : py;
     }
 
     private static void GenerateTerrain(Color[] pixels, TileData tile)
