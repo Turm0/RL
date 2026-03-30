@@ -95,23 +95,42 @@ public class TileMap
     /// </summary>
     public void PopulateElevation()
     {
+        // Pass 1: mark all zone interior tiles
         foreach (var zone in _zones.Values)
         {
             if (!zone.HasRoof) continue;
-
-            // Zone interior + 1 tile margin (walls/overhang)
-            int x1 = zone.Bounds.X - 1;
-            int y1 = zone.Bounds.Y - 1;
-            int x2 = zone.Bounds.Right + 1;
-            int y2 = zone.Bounds.Bottom + 1;
-
-            for (int x = x1; x < x2; x++)
-            {
-                for (int y = y1; y < y2; y++)
+            for (int x = zone.Bounds.X; x < zone.Bounds.Right; x++)
+                for (int y = zone.Bounds.Y; y < zone.Bounds.Bottom; y++)
                 {
                     if (!IsInBounds(x, y)) continue;
-                    _tiles[x, y].ElevationLayer = 1;
+                    if (_tiles[x, y].ZoneId == zone.Id)
+                        _tiles[x, y].ElevationLayer = 1;
                 }
+        }
+
+        // Pass 2: mark walls adjacent to any elevated tile (any shape building)
+        for (int x = 0; x < Width; x++)
+        {
+            for (int y = 0; y < Height; y++)
+            {
+                if (!_tiles[x, y].HasWall) continue;
+                if (_tiles[x, y].ElevationLayer > 0) continue;
+
+                // Check 8 neighbors for any elevated tile
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    for (int dy = -1; dy <= 1; dy++)
+                    {
+                        if (dx == 0 && dy == 0) continue;
+                        int nx = x + dx, ny = y + dy;
+                        if (IsInBounds(nx, ny) && _tiles[nx, ny].ElevationLayer > 0)
+                        {
+                            _tiles[x, y].ElevationLayer = 1;
+                            goto nextWall;
+                        }
+                    }
+                }
+                nextWall:;
             }
         }
     }

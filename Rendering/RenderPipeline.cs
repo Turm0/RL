@@ -16,6 +16,7 @@ public class RenderPipeline
     private EffectOverlayRenderer _effectOverlayRenderer;
     private FogEdgeRenderer _fogEdgeRenderer;
     private WeatherRenderer _weatherRenderer;
+    private PostProcessSystem _postProcess;
     private LightingSystem _lightingSystem;
     private FogOfWar _fogOfWar;
     private SpriteBatch _spriteBatch;
@@ -30,9 +31,11 @@ public class RenderPipeline
     public Camera Camera => _camera;
     public FogOfWar FogOfWar => _fogOfWar;
     public EffectOverlayRenderer EffectOverlay => _effectOverlayRenderer;
+    public PostProcessSystem PostProcess => _postProcess;
     public LightingSystem Lighting => _lightingSystem;
 
-    public void Initialize(GraphicsDevice graphicsDevice, GameWindow window, TileMap map, SpriteFont font)
+    public void Initialize(GraphicsDevice graphicsDevice, GameWindow window, TileMap map, SpriteFont font,
+        Effect postProcessEffect = null)
     {
         _graphicsDevice = graphicsDevice;
         _window = window;
@@ -52,6 +55,9 @@ public class RenderPipeline
         _effectOverlayRenderer = new EffectOverlayRenderer();
         _fogEdgeRenderer = new FogEdgeRenderer();
         _fogEdgeRenderer.Initialize(graphicsDevice);
+        _postProcess = new PostProcessSystem();
+        if (postProcessEffect != null)
+            _postProcess.Initialize(graphicsDevice, postProcessEffect);
         _weatherRenderer = new WeatherRenderer();
         _weatherRenderer.Initialize(graphicsDevice);
         _lightingSystem = new LightingSystem();
@@ -181,8 +187,11 @@ public class RenderPipeline
         _lightingSystem.BlurBuffer(map);
         _lightingSystem.BuildTexture(_graphicsDevice, _fogOfWar);
 
-        // Draw scene
-        _graphicsDevice.Clear(Color.Black);
+        // Draw scene (to RT if post-process enabled, otherwise direct)
+        if (_postProcess.Enabled)
+            _postProcess.BeginScene();
+        else
+            _graphicsDevice.Clear(Color.Black);
 
         // 1. Terrain
         _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
@@ -228,6 +237,41 @@ public class RenderPipeline
             _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied);
             _weatherRenderer.DrawOverlayEffects(_spriteBatch, _weatherState);
             _spriteBatch.End();
+        }
+
+        // Post-process: apply shader effects to the entire scene
+        if (_postProcess.Enabled)
+        {
+            // Compute player screen position as UV
+            var playerWorldPos = new Vector2(
+                playerZoneId != 0 ? 0 : 0, // placeholder
+                0);
+            // Get actual player pos
+            using (var pp = ecsWorld.GetEntities().With<PlayerControlled>().With<Position>().AsSet())
+            {
+                foreach (ref readonly var e in pp.GetEntities())
+                {
+                    ref readonly var pos = ref e.Get<Position>();
+                    var screenPos = _camera.WorldToScreen(new Vector2(
+                        pos.TileX * GameConfig.TileSize + GameConfig.TileSize / 2f,
+                        pos.TileY * GameConfig.TileSize + GameConfig.TileSize / 2f));
+                    playerWorldPos = new Vector2(
+                        screenPos.X / _graphicsDevice.Viewport.Width,
+                        screenPos.Y / _graphicsDevice.Viewport.Height);
+                    break;
+                }
+            }
+
+            // Drive shader from weather state
+            if (_weatherState != null)
+            {
+                bool isRain = _weatherState.Type == WeatherType.Rain || _weatherState.Type == WeatherType.Thunderstorm;
+                bool isSnow = _weatherState.Type == WeatherType.Snow;
+                _postProcess.WetAmount = isRain ? _weatherState.Intensity : 0f;
+                _postProcess.FrostAmount = isSnow ? _weatherState.Intensity * 0.5f : 0f;
+            }
+
+            _postProcess.EndScene(time, _camera, _fogOfWar, map, playerWorldPos, _lightingSystem.AmbientColor);
         }
 
         // 9. HUD

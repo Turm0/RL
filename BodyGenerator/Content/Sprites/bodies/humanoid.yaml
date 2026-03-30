@@ -60,18 +60,18 @@ parts:
       ..CCCC..
 
   head:
-    width: 8
+    width: 6
     height: 7
-    anchor: [4, 6]
+    anchor: [3, 6]
     joints: {}
     pixels: |
-      .ssssss.
-      sHhhhhhs
-      shhhhhhs
-      shEhhEhs
-      shEhhEhs
-      .shhhhs.
-      ..ssss..
+      .ssss.
+      shhHhs
+      shhhhs
+      sEhhEs
+      sEhhEs
+      .shhs.
+      ..ss..
 
   upper_arm_left:
     width: 3

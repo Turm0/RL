@@ -51,8 +51,8 @@ public class FogOfWar
         if (!_visible[x, y]) return 0f;
         if (_fovRadius <= 0) return 1f;
         float dist = _distance[x, y];
-        // Full color within 40% of radius, then gradual fade
-        float fadeStart = _fovRadius * 0.4f;
+        // Full color within 5 tiles, then gradual fade to FOV edge
+        float fadeStart = 5f;
         if (dist <= fadeStart) return 1f;
         float fadeEnd = _fovRadius;
         if (dist >= fadeEnd) return 0f;

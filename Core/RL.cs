@@ -44,9 +44,10 @@ public class RL : Game
         _ecsWorld = new DefaultEcs.World();
 
         var font = Content.Load<Microsoft.Xna.Framework.Graphics.SpriteFont>("DefaultFont");
+        var postProcessFx = Content.Load<Microsoft.Xna.Framework.Graphics.Effect>("Effects/PostProcess");
 
         _renderPipeline = new RenderPipeline();
-        _renderPipeline.Initialize(GraphicsDevice, Window, _tileMap, font);
+        _renderPipeline.Initialize(GraphicsDevice, Window, _tileMap, font, postProcessFx);
 
         SpawnEntities();
 
