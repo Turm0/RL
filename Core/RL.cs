@@ -73,7 +73,7 @@ public class RL : Game
         player.Set(new PlayerControlled());
         player.Set(new RenderLayer(RenderLayer.CreatureLayer));
         player.Set(new LightEmitter(10f, 1.0f, new Vector3(1.2f, 1.1f, 0.9f), true, 0.15f));
-        player.Set(new MovementAnimation(8f, MoveAnimType.Slide));
+        player.Set(new MovementAnimation(12f, MoveAnimType.Slide));
 
         // --- Outdoor NPCs ---
         SpawnCreature(20, 17, "creatures/human_mage.yaml");

@@ -106,10 +106,11 @@ public class EntityRenderer
                     switch (anim.Type)
                     {
                         case MoveAnimType.Slide:
-                            // Smooth lerp from old to new position
+                            // Smooth lerp from old to new position + subtle bob
                             float st = t * t * (3f - 2f * t); // smoothstep
                             worldPixelX = anim.FromX * tileSize + (pos.TileX * tileSize - anim.FromX * tileSize) * st;
                             worldPixelY = anim.FromY * tileSize + (pos.TileY * tileSize - anim.FromY * tileSize) * st;
+                            yOffset = -MathF.Sin(t * MathF.PI) * 1.0f; // subtle 1px bob
                             break;
 
                         case MoveAnimType.Hop:
@@ -130,10 +131,19 @@ public class EntityRenderer
 
             Rectangle destRect;
 
-            if (creatureType.EndsWith(".yaml") || entity.Has<TerrainObject>() || entity.Has<GroundItem>())
+            if (entity.Has<TerrainObject>() || entity.Has<GroundItem>())
             {
                 var screenPos = camera.WorldToScreen(new Vector2(worldPixelX, worldPixelY + yOffset));
                 destRect = new Rectangle((int)screenPos.X, (int)screenPos.Y, tileSize, tileSize);
+            }
+            else if (creatureType.EndsWith(".yaml"))
+            {
+                // Creatures are slightly larger than a tile, anchored at bottom
+                int drawH = (int)(tileSize * 1.3f);
+                int drawW = (int)(tileSize * 1.3f);
+                var screenPos = camera.WorldToScreen(new Vector2(worldPixelX, worldPixelY + yOffset));
+                int xOff = (tileSize - drawW) / 2;
+                destRect = new Rectangle((int)screenPos.X + xOff, (int)screenPos.Y + tileSize - drawH, drawW, drawH);
             }
             else
             {
