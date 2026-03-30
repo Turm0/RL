@@ -7,22 +7,29 @@ namespace RoguelikeEngine.World;
 public class FogOfWar
 {
     private readonly bool[,] _explored;
-    private readonly HashSet<long> _visible;
-    private readonly HashSet<long> _visited;
+    private readonly bool[,] _visible;
+    private readonly bool[,] _visited;
     private readonly int _mapWidth;
     private readonly int _mapHeight;
     private ushort _viewerZoneId;
+
+    // Pooled list for corner fills (avoids allocation per frame)
+    private readonly List<(int x, int y)> _cornerFills = new(64);
 
     public FogOfWar(int mapWidth, int mapHeight)
     {
         _mapWidth = mapWidth;
         _mapHeight = mapHeight;
         _explored = new bool[mapWidth, mapHeight];
-        _visible = new HashSet<long>();
-        _visited = new HashSet<long>();
+        _visible = new bool[mapWidth, mapHeight];
+        _visited = new bool[mapWidth, mapHeight];
     }
 
-    public bool IsVisible(int x, int y) => _visible.Contains(Key(x, y));
+    public bool IsVisible(int x, int y)
+    {
+        if (x < 0 || x >= _mapWidth || y < 0 || y >= _mapHeight) return false;
+        return _visible[x, y];
+    }
 
     public bool IsExplored(int x, int y)
     {
@@ -32,8 +39,8 @@ public class FogOfWar
 
     public void Compute(int playerX, int playerY, int radius, TileMap map, ushort viewerZoneId = 0)
     {
-        _visible.Clear();
-        _visited.Clear();
+        Array.Clear(_visible, 0, _visible.Length);
+        Array.Clear(_visited, 0, _visited.Length);
         _viewerZoneId = viewerZoneId;
 
         MarkVisible(playerX, playerY);
@@ -47,69 +54,71 @@ public class FogOfWar
     private void MarkVisible(int x, int y)
     {
         if (x < 0 || x >= _mapWidth || y < 0 || y >= _mapHeight) return;
-        if (!_visited.Add(Key(x, y))) return;
-        _visible.Add(Key(x, y));
+        if (_visited[x, y]) return;
+        _visited[x, y] = true;
+        _visible[x, y] = true;
         _explored[x, y] = true;
     }
 
     private void MarkReached(int x, int y, TileMap map)
     {
         if (x < 0 || x >= _mapWidth || y < 0 || y >= _mapHeight) return;
-        if (!_visited.Add(Key(x, y))) return;
+        if (_visited[x, y]) return;
+        _visited[x, y] = true;
 
         if (!map.HasWall(x, y))
         {
-            _visible.Add(Key(x, y));
+            _visible[x, y] = true;
             _explored[x, y] = true;
         }
     }
 
     private void MarkVisibleWalls(TileMap map)
     {
-        foreach (long key in _visited)
+        // First pass: make walls with visible floor neighbors visible
+        for (int x = 0; x < _mapWidth; x++)
         {
-            int x = (int)(key >> 32);
-            int y = (int)(key & 0xFFFFFFFF);
-
-            if (x < 0 || x >= _mapWidth || y < 0 || y >= _mapHeight) continue;
-            if (!map.HasWall(x, y)) continue;
-            if (_visible.Contains(key)) continue;
-
-            if (HasVisibleFloorNeighbor(map, x, y))
+            for (int y = 0; y < _mapHeight; y++)
             {
-                _visible.Add(key);
-                _explored[x, y] = true;
+                if (!_visited[x, y]) continue;
+                if (!map.HasWall(x, y)) continue;
+                if (_visible[x, y]) continue;
+
+                if (HasVisibleFloorNeighbor(map, x, y))
+                {
+                    _visible[x, y] = true;
+                    _explored[x, y] = true;
+                }
             }
         }
 
-        var cornerFills = new List<(int x, int y)>();
-        foreach (long key in _visible)
+        // Second pass: corner fills
+        _cornerFills.Clear();
+        for (int x = 0; x < _mapWidth; x++)
         {
-            int x = (int)(key >> 32);
-            int y = (int)(key & 0xFFFFFFFF);
+            for (int y = 0; y < _mapHeight; y++)
+            {
+                if (!_visible[x, y]) continue;
+                if (map.HasWall(x, y)) continue;
 
-            if (x < 0 || x >= _mapWidth || y < 0 || y >= _mapHeight) continue;
-            if (map.HasWall(x, y)) continue;
-
-            TryFillCorner(map, x, y, -1, -1, cornerFills);
-            TryFillCorner(map, x, y,  1, -1, cornerFills);
-            TryFillCorner(map, x, y, -1,  1, cornerFills);
-            TryFillCorner(map, x, y,  1,  1, cornerFills);
+                TryFillCorner(map, x, y, -1, -1);
+                TryFillCorner(map, x, y,  1, -1);
+                TryFillCorner(map, x, y, -1,  1);
+                TryFillCorner(map, x, y,  1,  1);
+            }
         }
 
-        foreach (var (cx, cy) in cornerFills)
+        foreach (var (cx, cy) in _cornerFills)
         {
-            var k = Key(cx, cy);
-            if (!_visible.Contains(k))
+            if (!_visible[cx, cy])
             {
-                _visible.Add(k);
+                _visible[cx, cy] = true;
                 _explored[cx, cy] = true;
             }
         }
     }
 
-    private void TryFillCorner(TileMap map, int floorX, int floorY, int dx, int dy,
-        List<(int, int)> fills)
+    private void TryFillCorner(TileMap map, int floorX, int floorY, int dx, int dy)
     {
         int cornerX = floorX + dx;
         int cornerY = floorY + dy;
@@ -121,10 +130,12 @@ public class FogOfWar
         if (!map.IsInBounds(cornerX, cornerY)) return;
         if (!map.HasWall(cornerX, cornerY)) return;
 
-        if (_visible.Contains(Key(wallAX, wallAY)) && map.HasWall(wallAX, wallAY) &&
-            _visible.Contains(Key(wallBX, wallBY)) && map.HasWall(wallBX, wallBY))
+        if (wallAX >= 0 && wallAX < _mapWidth && wallAY >= 0 && wallAY < _mapHeight &&
+            _visible[wallAX, wallAY] && map.HasWall(wallAX, wallAY) &&
+            wallBX >= 0 && wallBX < _mapWidth && wallBY >= 0 && wallBY < _mapHeight &&
+            _visible[wallBX, wallBY] && map.HasWall(wallBX, wallBY))
         {
-            fills.Add((cornerX, cornerY));
+            _cornerFills.Add((cornerX, cornerY));
         }
     }
 
@@ -138,10 +149,8 @@ public class FogOfWar
     {
         if (x < 0 || x >= _mapWidth || y < 0 || y >= _mapHeight) return false;
         if (map.HasWall(x, y)) return false;
-        return _visible.Contains(Key(x, y));
+        return _visible[x, y];
     }
-
-    private static long Key(int x, int y) => ((long)x << 32) | (uint)y;
 
     private static readonly int[] _xx = { 1,  0,  0, -1, -1,  0,  0,  1 };
     private static readonly int[] _xy = { 0,  1, -1,  0,  0, -1,  1,  0 };

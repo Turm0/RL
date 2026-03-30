@@ -51,7 +51,7 @@ public class EffectOverlayRenderer
                     if (effect.Intensity <= 0.01f) continue;
 
                     int qi = (int)(effect.Intensity * 10f + 0.5f);
-                    string cacheKey = $"efx_{(byte)effect.Type}_{qi}_{TileMap.ComputeVariantSeed(x, y)}";
+                    long cacheKey = (long)(byte)effect.Type | ((long)qi << 8) | ((long)TileMap.ComputeVariantSeed(x, y) << 12);
                     var texture = _cache.GetOrCreate(cacheKey, () =>
                         GenerateOverlay(spriteBatch.GraphicsDevice, effect, x, y));
 

@@ -71,7 +71,15 @@ public class EntityRenderer
             int tileX = pos.TileX, tileY = pos.TileY;
             bool isTerrainObj = entity.Has<TerrainObject>();
             string objType = isTerrainObj ? entity.Get<TerrainObject>().ObjectType : null;
-            string cacheKey = isTerrainObj ? $"obj_{objType}_{tileX}_{tileY}" : $"{creatureType}_{size}";
+            // Use creature type directly as key (avoids string allocation per frame)
+            // Size variants are rare, so append only when non-default
+            string cacheKey;
+            if (isTerrainObj)
+                cacheKey = $"obj_{objType}_{tileX}_{tileY}";
+            else if (size == 1.0f)
+                cacheKey = creatureType;
+            else
+                cacheKey = $"{creatureType}_{size}";
 
             var texture = _cache.GetOrCreate(cacheKey, () =>
             {
