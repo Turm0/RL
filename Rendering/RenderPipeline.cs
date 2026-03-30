@@ -209,12 +209,20 @@ public class RenderPipeline
         _effectOverlayRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar, time);
         _spriteBatch.End();
 
-        // 6. Roofs on top of everything
+        // 6. Roofs/elevated layer
         _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
         _roofRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar, _lightingSystem.AmbientColor);
         _spriteBatch.End();
 
-        // 7. Atmosphere tint + lightning flash (screen-space)
+        // 7. Weather on elevated surfaces (tinted by ambient to match brightness)
+        if (_weatherState != null && _weatherState.Intensity > 0.01f)
+        {
+            _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
+            _weatherRenderer.DrawElevatedEffects(_spriteBatch, _weatherState, _camera, map, playerZoneId, _fogOfWar, _lightingSystem.AmbientColor);
+            _spriteBatch.End();
+        }
+
+        // 8. Atmosphere tint + lightning flash
         if (_weatherState != null && (_weatherState.Intensity > 0.01f || _weatherState.LightningFlash > 0.01f))
         {
             _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied);
@@ -222,7 +230,7 @@ public class RenderPipeline
             _spriteBatch.End();
         }
 
-        // 8. HUD
+        // 9. HUD
         if (_font != null)
         {
             _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);

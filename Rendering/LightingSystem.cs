@@ -102,18 +102,8 @@ public class LightingSystem
                 int mapX = visibleRect.X + tx;
                 int mapY = visibleRect.Y + ty;
 
-                // Check if tile is under a roof — use indoor ambient instead
-                bool isIndoor = false;
-                if (map.IsInBounds(mapX, mapY))
-                {
-                    ushort zoneId = map.GetZoneId(mapX, mapY);
-                    if (zoneId != 0)
-                    {
-                        var zone = map.GetZone(zoneId);
-                        if (zone != null && zone.HasRoof)
-                            isIndoor = true;
-                    }
-                }
+                // Indoor = has elevated cover AND belongs to a zone (not just a wall)
+                bool isIndoor = map.HasElevatedCover(mapX, mapY) && map.GetZoneId(mapX, mapY) != 0;
 
                 var baseAmbient = isIndoor ? IndoorAmbient : _ambientColor;
                 var ambient = isIndoor ? baseAmbient : baseAmbient * _weatherAmbientMod;

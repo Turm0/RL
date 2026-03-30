@@ -116,11 +116,9 @@ public class RoofRenderer
 
     public bool IsHiddenByRoof(TileMap map, int tileX, int tileY, ushort playerZoneId)
     {
+        if (!map.HasElevatedCover(tileX, tileY)) return false;
         ushort zoneId = map.GetZoneId(tileX, tileY);
-        if (zoneId == 0) return false;
-        var zone = map.GetZone(zoneId);
-        if (zone == null || !zone.HasRoof) return false;
-        if (zoneId == playerZoneId) return false;
+        if (zoneId == 0 || zoneId == playerZoneId) return false;
 
         _roofAlpha.TryGetValue(zoneId, out float alpha);
         return alpha > 0.5f;

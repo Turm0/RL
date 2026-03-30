@@ -26,7 +26,7 @@ public class WeatherRenderer
 
     private float _atmosphereFade;
     private int _frameCount;
-    private ushort _playerZoneId;
+    private ushort _lastPlayerZoneId;
 
     // Rain puddle pool — simple rotating buffer of random positions
     private const int MaxRippleSlots = 32;
@@ -92,10 +92,10 @@ public class WeatherRenderer
         int tileSize = GameConfig.TileSize;
         float camX = camera.Position.X;
         float camY = camera.Position.Y;
-        float worldLeft = camX;
-        float worldTop = camY;
-        float worldRight = camX + viewportWidth;
-        float worldBottom = camY + viewportHeight;
+        float worldLeft = Math.Max(camX, 0);
+        float worldTop = Math.Max(camY, 0);
+        float worldRight = Math.Min(camX + viewportWidth, map.Width * tileSize);
+        float worldBottom = Math.Min(camY + viewportHeight, map.Height * tileSize);
 
         // --- Manage rain puddle pool ---
         if (isRain && intensity > 0.01f)
@@ -269,7 +269,7 @@ public class WeatherRenderer
     public void DrawGroundEffects(SpriteBatch spriteBatch, WeatherState weather, Camera camera,
         TileMap map, ushort playerZoneId, FogOfWar fow)
     {
-        _playerZoneId = playerZoneId;
+        _lastPlayerZoneId = playerZoneId;
 
         if (_rippleSlotCount == 0 && _activeCount == 0) return;
 
@@ -285,22 +285,6 @@ public class WeatherRenderer
         float camPosY = camera.Position.Y;
         float invTS = 1f / tileSize;
 
-        // Roof exclusion: player's zone bounds + 1 tile margin (covers walls)
-        int rzx1 = 0, rzy1 = 0, rzx2 = 0, rzy2 = 0;
-        bool hasRoofZone = false;
-        if (playerZoneId != 0)
-        {
-            var pZone = map.GetZone(playerZoneId);
-            if (pZone != null && pZone.HasRoof)
-            {
-                hasRoofZone = true;
-                rzx1 = pZone.Bounds.X - 1;
-                rzy1 = pZone.Bounds.Y - 1;
-                rzx2 = pZone.Bounds.Right + 1;
-                rzy2 = pZone.Bounds.Bottom + 1;
-            }
-        }
-
         for (int i = 0; i < _rippleSlotCount; i++)
         {
             ref var slot = ref _rippleSlots[i];
@@ -313,8 +297,7 @@ public class WeatherRenderer
             int ttx = (int)(slot.WorldX * invTS);
             int tty = (int)(slot.WorldY * invTS);
             if (!fow.IsVisible(ttx, tty)) continue;
-            if (hasRoofZone && ttx >= rzx1 && ttx < rzx2 && tty >= rzy1 && tty < rzy2)
-                continue;
+            if (map.HasElevatedCover(ttx, tty)) continue;
 
             // Puddle fill
             int fillAlpha = (int)(weather.Intensity * 50);
@@ -339,8 +322,7 @@ public class WeatherRenderer
             int pty = (int)(p.WorldY * invTileSize2);
             if (!map.IsInBounds(ptx, pty)) continue;
             if (!fow.IsVisible(ptx, pty)) continue;
-            if (hasRoofZone && ptx >= rzx1 && ptx < rzx2 && pty >= rzy1 && pty < rzy2)
-                continue;
+            if (map.HasElevatedCover(ptx, pty)) continue;
 
             int sx = p.ScreenX;
             int sy = p.ScreenY;
@@ -396,6 +378,67 @@ public class WeatherRenderer
 
         _particleTexture.SetData(_particlePixels);
         spriteBatch.Draw(_particleTexture, Vector2.Zero, Color.White);
+    }
+
+    /// <summary>
+    /// Draws weather on elevated surfaces (roofs, bridges). Call AFTER elevated layer rendering.
+    /// </summary>
+    public void DrawElevatedEffects(SpriteBatch spriteBatch, WeatherState weather, Camera camera,
+        TileMap map, ushort playerZoneId, FogOfWar fow, Vector3 ambientColor)
+    {
+        // Player indoors can't see any elevated surfaces
+        if (_activeCount == 0 || playerZoneId != 0) return;
+
+        var device = spriteBatch.GraphicsDevice;
+        int vpW = device.Viewport.Width;
+        int vpH = device.Viewport.Height;
+
+        EnsureTexture(device, vpW, vpH);
+        Array.Clear(_particlePixels, 0, _particlePixels.Length);
+
+        float invTileSize = 1f / GameConfig.TileSize;
+        bool anyDrawn = false;
+
+        // Pre-compute ambient tint as byte multipliers
+        float tintR = ambientColor.X;
+        float tintG = ambientColor.Y;
+        float tintB = ambientColor.Z;
+
+        for (int i = 0; i < _activeCount; i++)
+        {
+            ref var p = ref _particles[i];
+
+            int ptx = (int)(p.WorldX * invTileSize);
+            int pty = (int)(p.WorldY * invTileSize);
+            if (!map.IsInBounds(ptx, pty)) continue;
+            if (!map.HasElevatedCover(ptx, pty)) continue;
+            if (!fow.IsExplored(ptx, pty)) continue;
+
+            int sx = p.ScreenX;
+            int sy = p.ScreenY;
+            if (sx < -16 || sy < -16 || sx >= vpW + 16 || sy >= vpH + 16) continue;
+
+            anyDrawn = true;
+            switch (p.Type)
+            {
+                case TypeStreak:
+                    DrawRainStreak(sx, sy, p.Size, p.DriftX, p.DriftY, p.Life, p.MaxLife, vpW, vpH);
+                    break;
+                case TypeFlake:
+                case TypeSettled:
+                    DrawSnowParticle(sx, sy, p.Size, p.Type, p.Life, p.MaxLife, vpW, vpH);
+                    break;
+            }
+        }
+
+        if (anyDrawn)
+        {
+            // Tint drawn pixels by ambient — only touch non-transparent pixels
+            // Use the spriteBatch tint instead of per-pixel loop
+            _particleTexture.SetData(_particlePixels);
+            var tint = new Color(ambientColor.X, ambientColor.Y, ambientColor.Z, 1f);
+            spriteBatch.Draw(_particleTexture, Vector2.Zero, tint);
+        }
     }
 
     /// <summary>
@@ -622,17 +665,20 @@ public class WeatherRenderer
     }
 
     /// <summary>
-    /// Returns true if this tile should block weather spawning
-    /// (player's indoor zone + its walls, or out of bounds).
+    /// Returns true for tiles that should block weather spawning:
+    /// the player's indoor zone + surrounding walls.
     /// </summary>
     private bool IsPlayerIndoorTile(TileMap map, int tx, int ty)
     {
-        if (_playerZoneId == 0) return false;
-        var pZone = map.GetZone(_playerZoneId);
-        if (pZone == null || !pZone.HasRoof) return false;
-        // Check expanded bounds (zone + 1 tile wall margin)
-        return tx >= pZone.Bounds.X - 1 && tx < pZone.Bounds.Right + 1 &&
-               ty >= pZone.Bounds.Y - 1 && ty < pZone.Bounds.Bottom + 1;
+        if (!map.HasElevatedCover(tx, ty)) return false;
+        if (_lastPlayerZoneId == 0) return false;
+
+        ushort zoneId = map.GetZoneId(tx, ty);
+        // Inside player's zone
+        if (zoneId == _lastPlayerZoneId) return true;
+        // Wall tile adjacent to player's zone (zoneId=0 but elevated)
+        if (zoneId == 0 && map.GetTile(tx, ty).HasWall) return true;
+        return false;
     }
 
     // --- Streak / Snow drawing ---

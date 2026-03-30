@@ -40,6 +40,7 @@ public class RL : Game
         base.Initialize();
 
         _tileMap = CreateDemoLevel();
+        _tileMap.PopulateElevation();
         _ecsWorld = new DefaultEcs.World();
 
         var font = Content.Load<Microsoft.Xna.Framework.Graphics.SpriteFont>("DefaultFont");

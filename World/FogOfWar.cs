@@ -11,6 +11,7 @@ public class FogOfWar
     private readonly HashSet<long> _visited;
     private readonly int _mapWidth;
     private readonly int _mapHeight;
+    private ushort _viewerZoneId;
 
     public FogOfWar(int mapWidth, int mapHeight)
     {
@@ -33,6 +34,7 @@ public class FogOfWar
     {
         _visible.Clear();
         _visited.Clear();
+        _viewerZoneId = viewerZoneId;
 
         MarkVisible(playerX, playerY);
 

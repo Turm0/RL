@@ -77,11 +77,43 @@ public class TileMap
         if (BlocksLight(x, y)) return true;
 
         if (!IsInBounds(x, y)) return false;
-        ushort tileZone = _tiles[x, y].ZoneId;
-        if (tileZone == 0 || tileZone == viewerZoneId) return false;
+        ref var tile = ref _tiles[x, y];
+        if (tile.ElevationLayer == 0) return false;
+        if (tile.ZoneId == 0 || tile.ZoneId == viewerZoneId) return false;
+        return true;
+    }
 
-        var zone = GetZone(tileZone);
-        return zone != null && zone.HasRoof;
+    public bool HasElevatedCover(int x, int y)
+    {
+        if (!IsInBounds(x, y)) return false;
+        return _tiles[x, y].ElevationLayer > 0;
+    }
+
+    /// <summary>
+    /// Populates ElevationLayer on tiles based on roofed zones.
+    /// Call after all zones are registered and floors are set.
+    /// </summary>
+    public void PopulateElevation()
+    {
+        foreach (var zone in _zones.Values)
+        {
+            if (!zone.HasRoof) continue;
+
+            // Zone interior + 1 tile margin (walls/overhang)
+            int x1 = zone.Bounds.X - 1;
+            int y1 = zone.Bounds.Y - 1;
+            int x2 = zone.Bounds.Right + 1;
+            int y2 = zone.Bounds.Bottom + 1;
+
+            for (int x = x1; x < x2; x++)
+            {
+                for (int y = y1; y < y2; y++)
+                {
+                    if (!IsInBounds(x, y)) continue;
+                    _tiles[x, y].ElevationLayer = 1;
+                }
+            }
+        }
     }
 
     // --- Effects ---
