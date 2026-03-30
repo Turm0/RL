@@ -21,6 +21,8 @@ public class LightingSystem
     private float[] _blurTemp;
     private Color[] _texPixels;
     private readonly HashSet<long> _visited = new();
+    private bool[] _wallMask; // per-tile wall mask for blur optimization
+    private int _wallMaskW, _wallMaskH;
 
     private Vector3 _ambientColor = new(0.22f, 0.20f, 0.24f);
     private int _ambientMode = 0;
@@ -95,12 +97,22 @@ public class LightingSystem
     {
         _visibleRect = visibleRect;
 
+        // Build wall mask at tile resolution (used by BlurBuffer to avoid per-sub-pixel map calls)
+        if (_wallMask == null || _wallMaskW != visibleRect.Width || _wallMaskH != visibleRect.Height)
+        {
+            _wallMaskW = visibleRect.Width;
+            _wallMaskH = visibleRect.Height;
+            _wallMask = new bool[_wallMaskW * _wallMaskH];
+        }
+
         for (int ty = 0; ty < visibleRect.Height; ty++)
         {
             for (int tx = 0; tx < visibleRect.Width; tx++)
             {
                 int mapX = visibleRect.X + tx;
                 int mapY = visibleRect.Y + ty;
+
+                _wallMask[ty * _wallMaskW + tx] = map.BlocksLight(mapX, mapY);
 
                 // Indoor = has elevated cover AND belongs to a zone (not just a wall)
                 bool isIndoor = map.HasElevatedCover(mapX, mapY) && map.GetZoneId(mapX, mapY) != 0;
@@ -140,11 +152,12 @@ public class LightingSystem
         float lightCenterY = tileY + 0.5f;
 
         _visited.Clear();
+        float radiusSq = radius * radius;
 
-        LightTile(tileX, tileY, lightCenterX, lightCenterY, radius, effectiveIntensity, color, map);
+        LightTile(tileX, tileY, lightCenterX, lightCenterY, radius, radiusSq, effectiveIntensity, color, map);
 
         for (int octant = 0; octant < 8; octant++)
-            CastOctant(map, tileX, tileY, lightCenterX, lightCenterY, radius, effectiveIntensity, color, octant, 1, 1f, 0f);
+            CastOctant(map, tileX, tileY, lightCenterX, lightCenterY, radius, radiusSq, effectiveIntensity, color, octant, 1, 1f, 0f);
     }
 
     /// <summary>
@@ -158,12 +171,12 @@ public class LightingSystem
         {
             for (int x = 0; x < _bufferWidth; x++)
             {
-                // Map this sub-pixel back to tile coordinates
-                int tileX = _visibleRect.X + x / SubTileRes;
-                int tileY = _visibleRect.Y + y / SubTileRes;
+                // Map sub-pixel to tile-local coordinates for wall mask lookup
+                int ltx = x / SubTileRes;
+                int lty = y / SubTileRes;
 
-                // Skip blur for pixels on or adjacent to walls
-                if (map.BlocksLight(tileX, tileY))
+                // Skip blur for wall pixels (use cached mask)
+                if (ltx < _wallMaskW && lty < _wallMaskH && _wallMask[lty * _wallMaskW + ltx])
                     continue;
 
                 float r = 0, g = 0, b = 0;
@@ -178,10 +191,11 @@ public class LightingSystem
                         int nx = x + dx;
                         if (nx < 0 || nx >= _bufferWidth) continue;
 
-                        // Only average with non-wall pixels
-                        int nTileX = _visibleRect.X + nx / SubTileRes;
-                        int nTileY = _visibleRect.Y + ny / SubTileRes;
-                        if (map.BlocksLight(nTileX, nTileY)) continue;
+                        // Only average with non-wall pixels (use cached mask)
+                        int nltx = nx / SubTileRes;
+                        int nlty = ny / SubTileRes;
+                        if (nltx < _wallMaskW && nlty < _wallMaskH && _wallMask[nlty * _wallMaskW + nltx])
+                            continue;
 
                         int idx = (ny * _bufferWidth + nx) * 3;
                         r += _lightBuffer[idx];
@@ -204,34 +218,59 @@ public class LightingSystem
         Array.Copy(_blurTemp, _lightBuffer, _lightBuffer.Length);
     }
 
+    private Texture2D _pixel;
+    private SpriteBatch _lightBatch;
+
     public void BuildTexture(GraphicsDevice device, FogOfWar fow)
     {
-        for (int i = 0; i < _texPixels.Length; i++)
+        if (_pixel == null)
         {
-            int subX = i % _bufferWidth;
-            int subY = i / _bufferWidth;
-            int tileX = _visibleRect.X + subX / SubTileRes;
-            int tileY = _visibleRect.Y + subY / SubTileRes;
+            _pixel = new Texture2D(device, 1, 1);
+            _pixel.SetData(new[] { Color.White });
+            _lightBatch = new SpriteBatch(device);
+        }
 
-            if (fow.IsVisible(tileX, tileY))
-            {
-                int bi = i * 3;
-                float r = Math.Clamp(_lightBuffer[bi + 0], 0f, 1f);
-                float g = Math.Clamp(_lightBuffer[bi + 1], 0f, 1f);
-                float b = Math.Clamp(_lightBuffer[bi + 2], 0f, 1f);
+        // Render directly to RT — zero SetData, zero CPU→GPU upload
+        device.SetRenderTarget(_lightRT);
+        device.Clear(Color.White);
 
-                _texPixels[i] = new Color(
-                    (byte)(r * 255f),
-                    (byte)(g * 255f),
-                    (byte)(b * 255f),
-                    (byte)255);
-            }
-            else
+        _lightBatch.Begin(SpriteSortMode.Deferred, BlendState.Opaque, SamplerState.PointClamp);
+
+        int subRes = SubTileRes;
+        float invSubCount = 1f / (subRes * subRes);
+
+        for (int ty = 0; ty < _visibleRect.Height; ty++)
+        {
+            for (int tx = 0; tx < _visibleRect.Width; tx++)
             {
-                _texPixels[i] = Color.White;
+                int mapX = _visibleRect.X + tx;
+                int mapY = _visibleRect.Y + ty;
+
+                if (!fow.IsVisible(mapX, mapY))
+                    continue; // White already from Clear
+
+                // Draw each sub-pixel as a 1x1 quad for full-resolution lighting
+                int subX0 = tx * subRes;
+                int subY0 = ty * subRes;
+                for (int sy = 0; sy < subRes; sy++)
+                {
+                    for (int sx = 0; sx < subRes; sx++)
+                    {
+                        int bi = ((subY0 + sy) * _bufferWidth + subX0 + sx) * 3;
+                        float r = Math.Clamp(_lightBuffer[bi + 0], 0f, 1f);
+                        float g = Math.Clamp(_lightBuffer[bi + 1], 0f, 1f);
+                        float b = Math.Clamp(_lightBuffer[bi + 2], 0f, 1f);
+
+                        var color = new Color((byte)(r * 255f), (byte)(g * 255f), (byte)(b * 255f));
+                        _lightBatch.Draw(_pixel, new Rectangle(subX0 + sx, subY0 + sy, 1, 1), color);
+                    }
+                }
             }
         }
-        _lightRT.SetData(_texPixels);
+
+        _lightBatch.End();
+        device.SetRenderTarget(null);
+
     }
 
     public void Draw(SpriteBatch spriteBatch, Camera camera, int tileSize)
@@ -255,7 +294,7 @@ public class LightingSystem
     private static long TileKey(int x, int y) => ((long)x << 32) | (uint)y;
 
     private void LightTile(int tileX, int tileY, float lightCX, float lightCY,
-        float radius, float intensity, Vector3 color, TileMap map)
+        float radius, float radiusSq, float intensity, Vector3 color, TileMap map)
     {
         if (!_visited.Add(TileKey(tileX, tileY)))
             return;
@@ -290,11 +329,11 @@ public class LightingSystem
 
                 float ddx = subWorldX - lightCX;
                 float ddy = subWorldY - lightCY;
-                float dist = MathF.Sqrt(ddx * ddx + ddy * ddy);
+                float distSq = ddx * ddx + ddy * ddy;
 
-                float t = dist / radius;
-                if (t >= 1f) continue;
-                float f = 1f - t * t;
+                if (distSq >= radiusSq) continue;
+                float tSq = distSq / radiusSq;
+                float f = 1f - tSq;
                 float falloff = f * f;
 
                 int idx = (bufY * _bufferWidth + subX0 + sx) * 3;
@@ -306,7 +345,7 @@ public class LightingSystem
     }
 
     private void CastOctant(TileMap map, int ox, int oy, float lightCX, float lightCY,
-        float radius, float intensity, Vector3 color, int octant,
+        float radius, float radiusSq, float intensity, Vector3 color, int octant,
         int row, float startSlope, float endSlope)
     {
         if (startSlope < endSlope) return;
@@ -334,10 +373,10 @@ public class LightingSystem
 
                 int ddx2 = mapX - ox;
                 int ddy2 = mapY - oy;
-                float tileDist = MathF.Sqrt(ddx2 * ddx2 + ddy2 * ddy2);
+                float tileDistSq = ddx2 * ddx2 + ddy2 * ddy2;
 
-                if (tileDist <= radius)
-                    LightTile(mapX, mapY, lightCX, lightCY, radius, intensity, color, map);
+                if (tileDistSq <= radiusSq)
+                    LightTile(mapX, mapY, lightCX, lightCY, radius, radiusSq, intensity, color, map);
 
                 bool isOpaque = !map.IsInBounds(mapX, mapY) || map.BlocksLight(mapX, mapY);
 
@@ -356,7 +395,7 @@ public class LightingSystem
                 else if (isOpaque)
                 {
                     blocked = true;
-                    CastOctant(map, ox, oy, lightCX, lightCY, radius, intensity, color,
+                    CastOctant(map, ox, oy, lightCX, lightCY, radius, radiusSq, intensity, color,
                         octant, distance + 1, startSlope, lSlope);
                     newStartSlope = rSlope;
                 }

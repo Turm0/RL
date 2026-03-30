@@ -28,6 +28,7 @@ public class PostProcessSystem
     private int _rtWidth, _rtHeight;
     private float _visibleRectScreenX, _visibleRectScreenY;
     private float _visibleRectScreenW, _visibleRectScreenH;
+    private Rectangle _lastFogRect;
 
     // Shader parameters
     public float FogIntensity { get; set; } = 0.0f;
@@ -108,6 +109,12 @@ public class PostProcessSystem
     {
         int tileSize = GameConfig.TileSize;
         var visibleRect = camera.GetVisibleTileRect(tileSize);
+
+        // Skip rebuild if viewport hasn't moved
+        if (visibleRect == _lastFogRect && _fogDataTexture != null)
+            return;
+        _lastFogRect = visibleRect;
+
         int tilesW = visibleRect.Width;
         int tilesH = visibleRect.Height;
 

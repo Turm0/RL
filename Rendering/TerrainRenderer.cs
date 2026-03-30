@@ -57,29 +57,41 @@ public class TerrainRenderer
                 if (!explored) continue;
 
                 var tile = map.GetTile(x, y);
-                var neighbors = NeighborContext.FromMap(map, x, y);
-                long cacheKey = TerrainTextureGenerator.BuildCacheKey(tile, neighbors);
+
+                // Fast path: for static tiles, use position-based key to avoid neighbor computation
+                // Only compute full neighbor context if cache miss or animated
+                // Check if this tile or any neighbor might be liquid (needs animation)
+                bool needsLiquidCheck = visible && (TerrainTextureGenerator.IsLiquid(tile.Terrain) ||
+                    IsAdjacentToLiquid(map, x, y));
 
                 Texture2D texture;
 
-                bool isAnimated = visible && (TerrainTextureGenerator.IsLiquid(tile.Terrain)
-                    || HasLiquidNeighbor(neighbors));
+                if (!needsLiquidCheck)
+                {
+                    // Position-based cache lookup — no neighbor context needed for cache hits
+                    long posKey = ((long)x << 20) | (long)y;
+                    if (!visible) posKey |= unchecked((long)0x8000000000000000);
 
-                if (isAnimated)
-                {
-                    texture = GetAnimatedFrame(spriteBatch.GraphicsDevice, cacheKey, tile, neighbors, x, y, animFrame);
-                }
-                else if (visible)
-                {
-                    texture = _terrainCache.GetOrCreate(cacheKey, () =>
-                        _generator.Generate(spriteBatch.GraphicsDevice, tile, neighbors, x, y, null));
+                    texture = (visible ? _terrainCache : _memoryCache).GetOrCreate(posKey, () =>
+                    {
+                        var neighbors = NeighborContext.FromMap(map, x, y);
+                        return visible
+                            ? _generator.Generate(spriteBatch.GraphicsDevice, tile, neighbors, x, y, null)
+                            : _generator.GenerateMemory(spriteBatch.GraphicsDevice, tile, neighbors, x, y);
+                    });
                 }
                 else
                 {
-                    // Use a distinct key space for memory textures by flipping the sign bit
-                    long memKey = cacheKey | unchecked((long)0x8000000000000000);
-                    texture = _memoryCache.GetOrCreate(memKey, () =>
-                        _generator.GenerateMemory(spriteBatch.GraphicsDevice, tile, neighbors, x, y));
+                    // Animated tiles need full context every frame for frame selection
+                    var neighbors = NeighborContext.FromMap(map, x, y);
+                    long cacheKey = TerrainTextureGenerator.BuildCacheKey(tile, neighbors);
+                    bool hasLiquidNeighbor = HasLiquidNeighbor(neighbors);
+
+                    if (hasLiquidNeighbor || TerrainTextureGenerator.IsLiquid(tile.Terrain))
+                        texture = GetAnimatedFrame(spriteBatch.GraphicsDevice, cacheKey, tile, neighbors, x, y, animFrame);
+                    else
+                        texture = _terrainCache.GetOrCreate(cacheKey, () =>
+                            _generator.Generate(spriteBatch.GraphicsDevice, tile, neighbors, x, y, null));
                 }
 
                 var destRect = camera.TileToScreenRect(x, y, tileSize);
@@ -101,6 +113,18 @@ public class TerrainRenderer
         if (frames[frame] == null)
             frames[frame] = _generator.GenerateAnimated(device, tile, neighbors, worldX, worldY, null, frame, AnimFrameCount);
         return frames[frame];
+    }
+
+    private static bool IsAdjacentToLiquid(TileMap map, int x, int y)
+    {
+        return IsLiquidAt(map, x-1, y) || IsLiquidAt(map, x+1, y) ||
+               IsLiquidAt(map, x, y-1) || IsLiquidAt(map, x, y+1);
+    }
+
+    private static bool IsLiquidAt(TileMap map, int x, int y)
+    {
+        if (!map.IsInBounds(x, y)) return false;
+        return TerrainTextureGenerator.IsLiquid(map.GetTile(x, y).Terrain);
     }
 
     private static bool HasLiquidNeighbor(NeighborContext n)

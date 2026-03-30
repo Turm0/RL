@@ -4,6 +4,7 @@ using RoguelikeEngine.Core;
 using RoguelikeEngine.ECS.Components;
 using RoguelikeEngine.World;
 using System;
+using System.Diagnostics;
 
 namespace RoguelikeEngine.Rendering;
 
@@ -26,7 +27,17 @@ public class RenderPipeline
     private WeatherState _weatherState;
     private TileMap _map;
 
-    private const int FovRadius = 60;
+    private const int FovRadius = 30;
+
+    // Performance counters
+    private readonly Stopwatch _perfTimer = new();
+    private double _lastFrameMs;
+    private double _lastLightMs;
+    private double _lastFovMs;
+    private int _frameCounter;
+    private double _fpsAccum;
+    private double _displayFps;
+    private int _lastLightCount;
 
     public Camera Camera => _camera;
     public FogOfWar FogOfWar => _fogOfWar;
@@ -91,12 +102,15 @@ public class RenderPipeline
 
     public void UpdateFov(int playerTileX, int playerTileY, TileMap map)
     {
+        _perfTimer.Restart();
         ushort playerZoneId = map.GetZoneId(playerTileX, playerTileY);
         _fogOfWar.Compute(playerTileX, playerTileY, FovRadius, map, playerZoneId);
+        _lastFovMs = _perfTimer.Elapsed.TotalMilliseconds;
     }
 
     public void Draw(GameTime gameTime, TileMap map, DefaultEcs.World ecsWorld)
     {
+        _perfTimer.Restart();
         int tileSize = GameConfig.TileSize;
         var visibleRect = _camera.GetVisibleTileRect(tileSize);
         float time = (float)gameTime.TotalGameTime.TotalSeconds;
@@ -140,6 +154,7 @@ public class RenderPipeline
         }
 
         // Compute lighting
+        var lightTimer = Stopwatch.StartNew();
         _lightingSystem.Resize(visibleRect.Width, visibleRect.Height, _graphicsDevice);
         _lightingSystem.BeginFrame(visibleRect, map);
 
@@ -148,6 +163,7 @@ public class RenderPipeline
             .With<LightEmitter>()
             .AsSet();
 
+        int entityLightCount = 0;
         foreach (ref readonly var entity in lights.GetEntities())
         {
             ref readonly var pos = ref entity.Get<Position>();
@@ -159,14 +175,15 @@ public class RenderPipeline
                 pos.TileY - (int)light.Radius >= visibleRect.Y + visibleRect.Height)
                 continue;
 
-            // Stable flicker seed from position — small range so Sin() stays precise
             int flickerSeed = ((pos.TileX * 7 + pos.TileY * 13) & 0xFF);
 
             _lightingSystem.AddLight(pos.TileX, pos.TileY, light.Radius, light.Intensity,
                 light.Color, map, time, light.Flicker, light.FlickerIntensity, flickerSeed);
+            entityLightCount++;
         }
 
         // Terrain-emitted lights (lava, etc.)
+        int terrainLightCount = 0;
         for (int tx = visibleRect.X; tx < visibleRect.X + visibleRect.Width; tx++)
         {
             for (int ty = visibleRect.Y; ty < visibleRect.Y + visibleRect.Height; ty++)
@@ -181,11 +198,16 @@ public class RenderPipeline
                 _lightingSystem.AddLight(tx, ty, terrainDef.LightRadius, terrainDef.LightIntensity,
                     terrainDef.LightColor, map, time, terrainDef.LightFlicker,
                     terrainDef.LightFlickerIntensity, flickerSeed);
+                terrainLightCount++;
             }
         }
+        _lastLightCount = entityLightCount + terrainLightCount;
 
-        _lightingSystem.BlurBuffer(map);
+        // Blur disabled — sub-pixel resolution provides sufficient smoothing
+        // _lightingSystem.BlurBuffer(map);
+
         _lightingSystem.BuildTexture(_graphicsDevice, _fogOfWar);
+        _lastLightMs = lightTimer.Elapsed.TotalMilliseconds;
 
         // Draw scene (to RT if post-process enabled, otherwise direct)
         if (_postProcess.Enabled)
@@ -297,6 +319,20 @@ public class RenderPipeline
             string text = $"Light: {_lightingSystem.CurrentAmbientName} [L]  Move: {moveType} [M]{weatherInfo}";
             _spriteBatch.DrawString(_font, text, new Vector2(12, 12), Color.Black);
             _spriteBatch.DrawString(_font, text, new Vector2(10, 10), Color.White);
+
+            // Performance stats
+            _lastFrameMs = _perfTimer.Elapsed.TotalMilliseconds;
+            _fpsAccum += gameTime.ElapsedGameTime.TotalSeconds;
+            _frameCounter++;
+            if (_fpsAccum >= 0.5)
+            {
+                _displayFps = _frameCounter / _fpsAccum;
+                _frameCounter = 0;
+                _fpsAccum = 0;
+            }
+            string perf = $"FPS: {_displayFps:F0}  Frame: {_lastFrameMs:F1}ms  Light: {_lastLightMs:F1}ms ({_lastLightCount} src)  FOV: {_lastFovMs:F1}ms";
+            _spriteBatch.DrawString(_font, perf, new Vector2(12, 32), Color.Black);
+            _spriteBatch.DrawString(_font, perf, new Vector2(10, 30), Color.Yellow);
             _spriteBatch.End();
         }
     }

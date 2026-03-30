@@ -88,14 +88,12 @@ public class FogOfWar
         _distance[x, y] = MathF.Sqrt(dx * dx + dy * dy);
     }
 
-    private void MarkReached(int x, int y, TileMap map)
+    private void MarkReached(int x, int y, TileMap map, float dist)
     {
         if (x < 0 || x >= _mapWidth || y < 0 || y >= _mapHeight) return;
         if (_visited[x, y]) return;
         _visited[x, y] = true;
-
-        int dx = x - _playerX, dy = y - _playerY;
-        _distance[x, y] = MathF.Sqrt(dx * dx + dy * dy);
+        _distance[x, y] = dist;
 
         if (!map.HasWall(x, y))
         {
@@ -217,7 +215,7 @@ public class FogOfWar
                 float tileDist = MathF.Sqrt(ddx * ddx + ddy * ddy);
 
                 if (tileDist <= radius)
-                    MarkReached(mapX, mapY, map);
+                    MarkReached(mapX, mapY, map, tileDist);
 
                 bool isOpaque = !map.IsInBounds(mapX, mapY) || map.BlocksLight(mapX, mapY);
 
