@@ -1,0 +1,145 @@
+name: Torch
+sprite_size: 32
+anchor: [16, 28]
+pixel_size: 2
+animated: true
+frame_count: 4
+frame_rate: 5
+
+materials:
+  stick:
+    color: "#2A1A0E"
+  bracket:
+    color: "#404040"
+  flame_outer:
+    color: "#CC3300"
+    alpha: 200
+  flame_mid:
+    color: "#E86400"
+    alpha: 220
+  flame_inner:
+    color: "#FF9E20"
+    alpha: 240
+  flame_core:
+    color: "#FFD870"
+
+frames:
+  - shapes:
+    - type: line
+      material: stick
+      from: [16, 16]
+      to: [16, 28]
+      width: 3
+    - type: oval
+      material: bracket
+      center: [16, 16]
+      radius: [4, 2]
+    - type: flame
+      material: flame_outer
+      center: [16, 9]
+      width: 12
+      height: 16
+    - type: flame
+      material: flame_mid
+      center: [16, 8]
+      width: 8
+      height: 13
+    - type: flame
+      material: flame_inner
+      center: [16, 7]
+      width: 5
+      height: 10
+    - type: oval
+      material: flame_core
+      center: [16, 7]
+      radius: [2, 3]
+
+  - shapes:
+    - type: line
+      material: stick
+      from: [16, 16]
+      to: [16, 28]
+      width: 3
+    - type: oval
+      material: bracket
+      center: [16, 16]
+      radius: [4, 2]
+    - type: flame
+      material: flame_outer
+      center: [15, 8]
+      width: 11
+      height: 17
+    - type: flame
+      material: flame_mid
+      center: [15, 7]
+      width: 7
+      height: 14
+    - type: flame
+      material: flame_inner
+      center: [15, 6]
+      width: 4
+      height: 10
+    - type: oval
+      material: flame_core
+      center: [15, 6]
+      radius: [2, 2]
+
+  - shapes:
+    - type: line
+      material: stick
+      from: [16, 16]
+      to: [16, 28]
+      width: 3
+    - type: oval
+      material: bracket
+      center: [16, 16]
+      radius: [4, 2]
+    - type: flame
+      material: flame_outer
+      center: [17, 9]
+      width: 13
+      height: 15
+    - type: flame
+      material: flame_mid
+      center: [17, 8]
+      width: 9
+      height: 12
+    - type: flame
+      material: flame_inner
+      center: [17, 7]
+      width: 6
+      height: 9
+    - type: oval
+      material: flame_core
+      center: [17, 7]
+      radius: [3, 2]
+
+  - shapes:
+    - type: line
+      material: stick
+      from: [16, 16]
+      to: [16, 28]
+      width: 3
+    - type: oval
+      material: bracket
+      center: [16, 16]
+      radius: [4, 2]
+    - type: flame
+      material: flame_outer
+      center: [16, 10]
+      width: 10
+      height: 14
+    - type: flame
+      material: flame_mid
+      center: [16, 9]
+      width: 7
+      height: 11
+    - type: flame
+      material: flame_inner
+      center: [16, 8]
+      width: 4
+      height: 8
+    - type: oval
+      material: flame_core
+      center: [16, 8]
+      radius: [2, 2]

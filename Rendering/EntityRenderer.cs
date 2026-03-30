@@ -17,7 +17,10 @@ public class EntityRenderer
     private readonly TextureCache _cache;
     private readonly SpriteGenerator _spriteGenerator;
     private readonly TerrainObjectGenerator _objectGenerator;
+    private readonly ObjectSpriteGenerator _objectSpriteGenerator;
     private readonly List<Entity> _visibleEntities = new();
+    private readonly Dictionary<string, Texture2D[]> _objectAnimCache = new();
+    private float _animTime;
 
     public EntityRenderer(VectorRasterizer rasterizer, TextureCache cache)
     {
@@ -27,6 +30,7 @@ public class EntityRenderer
 
         string contentRoot = Path.Combine(AppContext.BaseDirectory, "Content", "Sprites");
         _spriteGenerator = new SpriteGenerator(contentRoot);
+        _objectSpriteGenerator = new ObjectSpriteGenerator(contentRoot);
     }
 
     public void Draw(SpriteBatch spriteBatch, Camera camera, DefaultEcs.World world,
@@ -37,6 +41,7 @@ public class EntityRenderer
             .With<SpriteShape>()
             .AsSet();
 
+        _animTime += deltaTime;
         _visibleEntities.Clear();
         foreach (ref readonly var entity in entitySet.GetEntities())
         {
@@ -81,16 +86,48 @@ public class EntityRenderer
             else
                 cacheKey = $"{creatureType}_{size}";
 
-            var texture = _cache.GetOrCreate(cacheKey, () =>
-            {
-                if (isTerrainObj)
-                    return _objectGenerator.Generate(spriteBatch.GraphicsDevice, objType,
-                        (int)(tileX * 374761393 + tileY * 668265263));
+            Texture2D texture;
+            bool isObjectYaml = creatureType.StartsWith("objects/") && creatureType.EndsWith(".yaml");
 
-                if (creatureType.EndsWith(".yaml"))
-                    return _spriteGenerator.Generate(spriteBatch.GraphicsDevice, creatureType);
-                return _rasterizer.RasterizeCreature(creatureType, size, tileSize, spriteBatch.GraphicsDevice);
-            });
+            if (isObjectYaml)
+            {
+                var def = _objectSpriteGenerator.GetDefinition(creatureType);
+                if (def.Animated && def.FrameCount > 1)
+                {
+                    // Animated object — use frame cache
+                    if (!_objectAnimCache.TryGetValue(creatureType, out var frames))
+                    {
+                        frames = new Texture2D[def.FrameCount];
+                        _objectAnimCache[creatureType] = frames;
+                    }
+                    int frameIdx = (int)(deltaTime * def.FrameRate) % def.FrameCount;
+                    // Use total time, not delta — need to pass total time
+                    // For now, use a simple global frame counter
+                    frameIdx = (int)(_animTime * def.FrameRate) % def.FrameCount;
+                    if (frames[frameIdx] == null)
+                        frames[frameIdx] = _objectSpriteGenerator.GenerateFrame(
+                            spriteBatch.GraphicsDevice, creatureType, frameIdx);
+                    texture = frames[frameIdx];
+                }
+                else
+                {
+                    texture = _cache.GetOrCreate(cacheKey, () =>
+                        _objectSpriteGenerator.Generate(spriteBatch.GraphicsDevice, creatureType));
+                }
+            }
+            else
+            {
+                texture = _cache.GetOrCreate(cacheKey, () =>
+                {
+                    if (isTerrainObj)
+                        return _objectGenerator.Generate(spriteBatch.GraphicsDevice, objType,
+                            (int)(tileX * 374761393 + tileY * 668265263));
+
+                    if (creatureType.EndsWith(".yaml"))
+                        return _spriteGenerator.Generate(spriteBatch.GraphicsDevice, creatureType);
+                    return _rasterizer.RasterizeCreature(creatureType, size, tileSize, spriteBatch.GraphicsDevice);
+                });
+            }
 
             // Compute world position with movement animation offset
             float worldPixelX = pos.TileX * tileSize;

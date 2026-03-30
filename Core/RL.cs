@@ -143,7 +143,7 @@ public class RL : Game
     {
         var entity = _ecsWorld.CreateEntity();
         entity.Set(new Position(x, y));
-        entity.Set(new SpriteShape("torch", 1.0f));
+        entity.Set(new SpriteShape("objects/torch.yaml", 1.0f));
         entity.Set(new RenderLayer(RenderLayer.TerrainObjectLayer));
         entity.Set(new LightEmitter(8f, 1.1f, new Vector3(1.3f, 1.0f, 0.65f), true, 0.3f));
     }
