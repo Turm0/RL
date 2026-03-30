@@ -21,6 +21,7 @@ public class FogEdgeRenderer
     private static readonly Color FogColor = new(0, 0, 0);
 
 
+
     public void Initialize(GraphicsDevice device)
     {
         int size = GameConfig.TileSize;

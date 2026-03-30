@@ -335,12 +335,15 @@ public class RoofRenderer
 
     private static void ToMemoryColors(Color[] pixels)
     {
+        const float saturation = 0.35f;
         for (int i = 0; i < pixels.Length; i++)
         {
             var c = pixels[i];
             float gray = c.R * 0.299f + c.G * 0.587f + c.B * 0.114f;
-            gray *= 1.0f;
-            pixels[i] = new Color((int)gray, (int)gray, (int)gray, c.A);
+            int r = (int)(gray + (c.R - gray) * saturation);
+            int g = (int)(gray + (c.G - gray) * saturation);
+            int b = (int)(gray + (c.B - gray) * saturation);
+            pixels[i] = new Color(r, g, b, c.A);
         }
     }
 

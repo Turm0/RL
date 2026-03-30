@@ -506,21 +506,27 @@ public class TerrainTextureGenerator
         if (!tile.HasWall)
             BlendTerrainEdgesWorld(pixels, tile, neighbors, worldX, worldY);
 
-        ToGrayscale(pixels);
+        ToMemoryStyle(pixels);
 
         var texture = new Texture2D(device, Size, Size);
         texture.SetData(pixels);
         return texture;
     }
 
-    public static void ToGrayscale(Color[] pixels)
+    /// <summary>
+    /// Partially desaturates pixels for memory tiles. Keeps some color for a washed-out look.
+    /// </summary>
+    public static void ToMemoryStyle(Color[] pixels)
     {
+        const float saturation = 0.35f; // 0 = full grayscale, 1 = full color
         for (int i = 0; i < pixels.Length; i++)
         {
             var c = pixels[i];
             float gray = c.R * 0.299f + c.G * 0.587f + c.B * 0.114f;
-            gray *= 1.0f;
-            pixels[i] = new Color((int)gray, (int)gray, (int)gray, c.A);
+            int r = (int)(gray + (c.R - gray) * saturation);
+            int g = (int)(gray + (c.G - gray) * saturation);
+            int b = (int)(gray + (c.B - gray) * saturation);
+            pixels[i] = new Color(r, g, b, c.A);
         }
     }
 

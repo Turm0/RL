@@ -9,9 +9,12 @@ public class FogOfWar
     private readonly bool[,] _explored;
     private readonly bool[,] _visible;
     private readonly bool[,] _visited;
+    private readonly float[,] _distance; // distance from player, set during Compute
     private readonly int _mapWidth;
     private readonly int _mapHeight;
     private ushort _viewerZoneId;
+    private int _fovRadius;
+    private int _playerX, _playerY;
 
     // Pooled list for corner fills (avoids allocation per frame)
     private readonly List<(int x, int y)> _cornerFills = new(64);
@@ -23,6 +26,7 @@ public class FogOfWar
         _explored = new bool[mapWidth, mapHeight];
         _visible = new bool[mapWidth, mapHeight];
         _visited = new bool[mapWidth, mapHeight];
+        _distance = new float[mapWidth, mapHeight];
     }
 
     public bool IsVisible(int x, int y)
@@ -37,11 +41,33 @@ public class FogOfWar
         return _explored[x, y];
     }
 
+    /// <summary>
+    /// Returns 1.0 for tiles close to the player, fading toward 0.0 at the FOV edge.
+    /// Used for gradual desaturation at vision boundary.
+    /// </summary>
+    public float GetVisibilityFactor(int x, int y)
+    {
+        if (x < 0 || x >= _mapWidth || y < 0 || y >= _mapHeight) return 0f;
+        if (!_visible[x, y]) return 0f;
+        if (_fovRadius <= 0) return 1f;
+        float dist = _distance[x, y];
+        // Full color within 40% of radius, then gradual fade
+        float fadeStart = _fovRadius * 0.4f;
+        if (dist <= fadeStart) return 1f;
+        float fadeEnd = _fovRadius;
+        if (dist >= fadeEnd) return 0f;
+        return 1f - (dist - fadeStart) / (fadeEnd - fadeStart);
+    }
+
     public void Compute(int playerX, int playerY, int radius, TileMap map, ushort viewerZoneId = 0)
     {
         Array.Clear(_visible, 0, _visible.Length);
         Array.Clear(_visited, 0, _visited.Length);
+        Array.Clear(_distance, 0, _distance.Length);
         _viewerZoneId = viewerZoneId;
+        _fovRadius = radius;
+        _playerX = playerX;
+        _playerY = playerY;
 
         MarkVisible(playerX, playerY);
 
@@ -58,6 +84,8 @@ public class FogOfWar
         _visited[x, y] = true;
         _visible[x, y] = true;
         _explored[x, y] = true;
+        int dx = x - _playerX, dy = y - _playerY;
+        _distance[x, y] = MathF.Sqrt(dx * dx + dy * dy);
     }
 
     private void MarkReached(int x, int y, TileMap map)
@@ -65,6 +93,9 @@ public class FogOfWar
         if (x < 0 || x >= _mapWidth || y < 0 || y >= _mapHeight) return;
         if (_visited[x, y]) return;
         _visited[x, y] = true;
+
+        int dx = x - _playerX, dy = y - _playerY;
+        _distance[x, y] = MathF.Sqrt(dx * dx + dy * dy);
 
         if (!map.HasWall(x, y))
         {

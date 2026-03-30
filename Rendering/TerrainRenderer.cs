@@ -83,6 +83,7 @@ public class TerrainRenderer
                 }
 
                 var destRect = camera.TileToScreenRect(x, y, tileSize);
+
                 var tint = visible ? Color.White : memoryTint;
                 spriteBatch.Draw(texture, destRect, tint);
             }

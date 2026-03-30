@@ -219,6 +219,7 @@ public class LightingSystem
                 float r = Math.Clamp(_lightBuffer[bi + 0], 0f, 1f);
                 float g = Math.Clamp(_lightBuffer[bi + 1], 0f, 1f);
                 float b = Math.Clamp(_lightBuffer[bi + 2], 0f, 1f);
+
                 _texPixels[i] = new Color(
                     (byte)(r * 255f),
                     (byte)(g * 255f),
