@@ -18,6 +18,8 @@ public class LightingSystem
     private int _lastVisibleH;
     private Rectangle _visibleRect;
 
+    private float[] _blurTemp;
+    private Color[] _texPixels;
     private readonly HashSet<long> _visited = new();
 
     private Vector3 _ambientColor = new(0.22f, 0.20f, 0.24f);
@@ -70,6 +72,8 @@ public class LightingSystem
         _bufferWidth = visibleTilesWide * SubTileRes;
         _bufferHeight = visibleTilesHigh * SubTileRes;
         _lightBuffer = new float[_bufferWidth * _bufferHeight * 3];
+        _blurTemp = new float[_lightBuffer.Length];
+        _texPixels = new Color[_bufferWidth * _bufferHeight];
 
         _lightRT?.Dispose();
         _lightRT = new RenderTarget2D(device, _bufferWidth, _bufferHeight);
@@ -148,8 +152,7 @@ public class LightingSystem
     /// </summary>
     public void BlurBuffer(TileMap map)
     {
-        var temp = new float[_lightBuffer.Length];
-        Array.Copy(_lightBuffer, temp, _lightBuffer.Length);
+        Array.Copy(_lightBuffer, _blurTemp, _lightBuffer.Length);
 
         for (int y = 0; y < _bufferHeight; y++)
         {
@@ -191,20 +194,19 @@ public class LightingSystem
                 if (count > 0)
                 {
                     int outIdx = (y * _bufferWidth + x) * 3;
-                    temp[outIdx] = r / count;
-                    temp[outIdx + 1] = g / count;
-                    temp[outIdx + 2] = b / count;
+                    _blurTemp[outIdx] = r / count;
+                    _blurTemp[outIdx + 1] = g / count;
+                    _blurTemp[outIdx + 2] = b / count;
                 }
             }
         }
 
-        Array.Copy(temp, _lightBuffer, _lightBuffer.Length);
+        Array.Copy(_blurTemp, _lightBuffer, _lightBuffer.Length);
     }
 
     public void BuildTexture(GraphicsDevice device, FogOfWar fow)
     {
-        var pixels = new Color[_bufferWidth * _bufferHeight];
-        for (int i = 0; i < pixels.Length; i++)
+        for (int i = 0; i < _texPixels.Length; i++)
         {
             int subX = i % _bufferWidth;
             int subY = i / _bufferWidth;
@@ -217,7 +219,7 @@ public class LightingSystem
                 float r = Math.Clamp(_lightBuffer[bi + 0], 0f, 1f);
                 float g = Math.Clamp(_lightBuffer[bi + 1], 0f, 1f);
                 float b = Math.Clamp(_lightBuffer[bi + 2], 0f, 1f);
-                pixels[i] = new Color(
+                _texPixels[i] = new Color(
                     (byte)(r * 255f),
                     (byte)(g * 255f),
                     (byte)(b * 255f),
@@ -225,10 +227,10 @@ public class LightingSystem
             }
             else
             {
-                pixels[i] = Color.White;
+                _texPixels[i] = Color.White;
             }
         }
-        _lightRT.SetData(pixels);
+        _lightRT.SetData(_texPixels);
     }
 
     public void Draw(SpriteBatch spriteBatch, Camera camera, int tileSize)

@@ -60,9 +60,9 @@ public class TerrainTextureGenerator
         var thisDef = TerrainRegistry.Get(tile.Terrain);
         int thisPri = thisDef.TransitionPriority;
 
-        var nTerrain = new TerrainId[] { neighbors.N, neighbors.NE, neighbors.E, neighbors.SE,
+        Span<TerrainId> nTerrain = stackalloc TerrainId[] { neighbors.N, neighbors.NE, neighbors.E, neighbors.SE,
             neighbors.S, neighbors.SW, neighbors.W, neighbors.NW };
-        var nWall = new bool[] { neighbors.WallN, neighbors.WallNE, neighbors.WallE, neighbors.WallSE,
+        Span<bool> nWall = stackalloc bool[] { neighbors.WallN, neighbors.WallNE, neighbors.WallE, neighbors.WallSE,
             neighbors.WallS, neighbors.WallSW, neighbors.WallW, neighbors.WallNW };
 
         for (int py = 0; py < Size; py++)

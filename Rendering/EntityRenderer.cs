@@ -17,6 +17,7 @@ public class EntityRenderer
     private readonly TextureCache _cache;
     private readonly SpriteGenerator _spriteGenerator;
     private readonly TerrainObjectGenerator _objectGenerator;
+    private readonly List<Entity> _visibleEntities = new();
 
     public EntityRenderer(VectorRasterizer rasterizer, TextureCache cache)
     {
@@ -36,18 +37,18 @@ public class EntityRenderer
             .With<SpriteShape>()
             .AsSet();
 
-        var visible = new List<Entity>();
+        _visibleEntities.Clear();
         foreach (ref readonly var entity in entitySet.GetEntities())
         {
             ref readonly var pos = ref entity.Get<Position>();
             if (!camera.IsInView(pos.TileX, pos.TileY, tileSize)) continue;
             if (!fow.IsVisible(pos.TileX, pos.TileY)) continue;
             if (isHiddenByRoof != null && isHiddenByRoof(pos.TileX, pos.TileY)) continue;
-            visible.Add(entity);
+            _visibleEntities.Add(entity);
         }
 
         // Sort by: RenderLayer → Y → X
-        visible.Sort((a, b) =>
+        _visibleEntities.Sort((a, b) =>
         {
             byte layerA = a.Has<RenderLayer>() ? a.Get<RenderLayer>().Layer : RenderLayer.CreatureLayer;
             byte layerB = b.Has<RenderLayer>() ? b.Get<RenderLayer>().Layer : RenderLayer.CreatureLayer;
@@ -60,7 +61,7 @@ public class EntityRenderer
             return cmp != 0 ? cmp : pa.TileX.CompareTo(pb.TileX);
         });
 
-        foreach (var entity in visible)
+        foreach (var entity in _visibleEntities)
         {
             ref readonly var pos = ref entity.Get<Position>();
             ref readonly var shape = ref entity.Get<SpriteShape>();

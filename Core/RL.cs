@@ -18,6 +18,8 @@ public class RL : Game
     private PlayerInputSystem _playerInputSystem;
     private WeatherSystem _weatherSystem;
     private KeyboardState _prevKeyboard;
+    private int _lastFovX = int.MinValue;
+    private int _lastFovY = int.MinValue;
 
     public RL()
     {
@@ -389,6 +391,10 @@ public class RL : Game
         foreach (ref readonly var entity in players.GetEntities())
         {
             ref readonly var pos = ref entity.Get<Position>();
+            if (pos.TileX == _lastFovX && pos.TileY == _lastFovY)
+                return;
+            _lastFovX = pos.TileX;
+            _lastFovY = pos.TileY;
             _renderPipeline.UpdateFov(pos.TileX, pos.TileY, _tileMap);
             break;
         }
