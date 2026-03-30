@@ -25,10 +25,18 @@ public class TerrainRenderer
     private const int AnimFrameCount = 8;
     private const float AnimFps = 1.5f;
 
-    public void Draw(SpriteBatch spriteBatch, TileMap map, Camera camera, FogOfWar fow, float totalSeconds)
+    public void Draw(SpriteBatch spriteBatch, TileMap map, Camera camera, FogOfWar fow, float totalSeconds,
+        Vector3 ambientColor = default)
     {
         int tileSize = GameConfig.TileSize;
         var visibleRect = camera.GetVisibleTileRect(tileSize);
+
+        // Memory tiles: ambient-scaled with a subtle cool tint
+        // Grayscale itself is the main distinction; tint just adds slight desaturation
+        var memoryTint = new Color(
+            ambientColor.X * 0.88f,
+            ambientColor.Y * 0.93f,
+            ambientColor.Z * 0.97f);
 
         int startX = visibleRect.X;
         int startY = visibleRect.Y;
@@ -75,8 +83,8 @@ public class TerrainRenderer
                 }
 
                 var destRect = camera.TileToScreenRect(x, y, tileSize);
-
-                spriteBatch.Draw(texture, destRect, Color.White);
+                var tint = visible ? Color.White : memoryTint;
+                spriteBatch.Draw(texture, destRect, tint);
             }
         }
     }

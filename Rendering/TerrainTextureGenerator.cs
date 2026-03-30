@@ -519,7 +519,7 @@ public class TerrainTextureGenerator
         {
             var c = pixels[i];
             float gray = c.R * 0.299f + c.G * 0.587f + c.B * 0.114f;
-            gray *= 0.3f;
+            gray *= 1.0f;
             pixels[i] = new Color((int)gray, (int)gray, (int)gray, c.A);
         }
     }

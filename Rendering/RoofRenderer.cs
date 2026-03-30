@@ -55,6 +55,12 @@ public class RoofRenderer
             int ag = (int)(ambientColor.Y * 255);
             int ab = (int)(ambientColor.Z * 255);
             var tint = new Color(ar, ag, ab, alphaByte);
+            // Memory tint: teal-shifted, matching terrain memory style
+            var memTint = new Color(
+                (int)(ambientColor.X * 0.88f * 255),
+                (int)(ambientColor.Y * 0.93f * 255),
+                (int)(ambientColor.Z * 0.97f * 255),
+                alphaByte);
 
             // A roof looks "normal" (not memory) if the player can see any wall of the building.
             // Since FOV can't penetrate walls, roof tiles are technically never visible,
@@ -108,7 +114,7 @@ public class RoofRenderer
 
                     var destRect = camera.TileToScreenRect(x, y, tileSize);
 
-                    spriteBatch.Draw(texture, destRect, tint);
+                    spriteBatch.Draw(texture, destRect, useNormalColor ? tint : memTint);
                 }
             }
         }
@@ -333,7 +339,7 @@ public class RoofRenderer
         {
             var c = pixels[i];
             float gray = c.R * 0.299f + c.G * 0.587f + c.B * 0.114f;
-            gray *= 0.3f;
+            gray *= 1.0f;
             pixels[i] = new Color((int)gray, (int)gray, (int)gray, c.A);
         }
     }

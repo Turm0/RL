@@ -14,6 +14,7 @@ public class RenderPipeline
     private EntityRenderer _entityRenderer;
     private RoofRenderer _roofRenderer;
     private EffectOverlayRenderer _effectOverlayRenderer;
+    private FogEdgeRenderer _fogEdgeRenderer;
     private WeatherRenderer _weatherRenderer;
     private LightingSystem _lightingSystem;
     private FogOfWar _fogOfWar;
@@ -49,6 +50,8 @@ public class RenderPipeline
         _entityRenderer = new EntityRenderer(new VectorRasterizer(), new TextureCache());
         _roofRenderer = new RoofRenderer();
         _effectOverlayRenderer = new EffectOverlayRenderer();
+        _fogEdgeRenderer = new FogEdgeRenderer();
+        _fogEdgeRenderer.Initialize(graphicsDevice);
         _weatherRenderer = new WeatherRenderer();
         _weatherRenderer.Initialize(graphicsDevice);
         _lightingSystem = new LightingSystem();
@@ -181,17 +184,16 @@ public class RenderPipeline
         // Draw scene
         _graphicsDevice.Clear(Color.Black);
 
-        // 1. Terrain + entities
+        // 1. Terrain
         _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
-        _terrainRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar, time);
+        _terrainRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar, time, _lightingSystem.AmbientColor);
+        _fogEdgeRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar);
         _spriteBatch.End();
 
-        // 2. Weather ground effects (puddles, streaks, snow — between terrain and entities)
+        // 2. Weather ground effects (puddles, streaks, snow — renders to internal RT then composites)
         if (_weatherState != null && _weatherState.Intensity > 0.01f)
         {
-            _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
             _weatherRenderer.DrawGroundEffects(_spriteBatch, _weatherState, _camera, map, playerZoneId, _fogOfWar);
-            _spriteBatch.End();
         }
 
         // 3. Entities
@@ -214,12 +216,10 @@ public class RenderPipeline
         _roofRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar, _lightingSystem.AmbientColor);
         _spriteBatch.End();
 
-        // 7. Weather on elevated surfaces (tinted by ambient to match brightness)
+        // 7. Weather on elevated surfaces (renders to internal RT, tinted by ambient)
         if (_weatherState != null && _weatherState.Intensity > 0.01f)
         {
-            _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
             _weatherRenderer.DrawElevatedEffects(_spriteBatch, _weatherState, _camera, map, playerZoneId, _fogOfWar, _lightingSystem.AmbientColor);
-            _spriteBatch.End();
         }
 
         // 8. Atmosphere tint + lightning flash
