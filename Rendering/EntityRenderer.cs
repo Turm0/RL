@@ -136,12 +136,8 @@ public class EntityRenderer
             }
             else
             {
-                var screenPos = camera.WorldToScreen(new Vector2(
-                    worldPixelX + tileSize / 2f, worldPixelY + tileSize / 2f + yOffset));
-                destRect = new Rectangle(
-                    (int)(screenPos.X - texture.Width / 2f),
-                    (int)(screenPos.Y - texture.Height / 2f),
-                    texture.Width, texture.Height);
+                var screenPos = camera.WorldToScreen(new Vector2(worldPixelX, worldPixelY + yOffset));
+                destRect = new Rectangle((int)screenPos.X, (int)screenPos.Y, tileSize, tileSize);
             }
 
             spriteBatch.Draw(texture, destRect, Color.White);
