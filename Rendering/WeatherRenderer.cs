@@ -13,7 +13,7 @@ namespace RoguelikeEngine.Rendering;
 /// </summary>
 public class WeatherRenderer
 {
-    private const int MaxParticles = 1500;
+    private const int MaxParticles = 4000;
 
     private readonly Particle[] _particles = new Particle[MaxParticles];
     private int _activeCount;
@@ -21,10 +21,12 @@ public class WeatherRenderer
     private Texture2D _particleTexture;
     private Color[] _particlePixels;
     private int _texWidth, _texHeight;
+
     private readonly Random _rng = new();
 
     private float _atmosphereFade;
     private int _frameCount;
+    private ushort _playerZoneId;
 
     // Rain puddle pool — simple rotating buffer of random positions
     private const int MaxRippleSlots = 32;
@@ -43,6 +45,7 @@ public class WeatherRenderer
     private const byte TypeStreak = 0;
     private const byte TypeFlake = 1;
     private const byte TypeSettled = 2;
+    private const byte TypeSplash = 3;
 
     private struct Particle
     {
@@ -97,7 +100,7 @@ public class WeatherRenderer
         // --- Manage rain puddle pool ---
         if (isRain && intensity > 0.01f)
         {
-            int targetCount = Math.Min(MaxRippleSlots, 4 + (int)(intensity * 28));
+            int targetCount = Math.Min(MaxRippleSlots, 8 + (int)(intensity * 24));
 
             // Fill up to target
             while (_rippleSlotCount < targetCount)
@@ -132,45 +135,110 @@ public class WeatherRenderer
             int tilesWide = viewportWidth / tileSize + 2;
             int tilesHigh = viewportHeight / tileSize + 2;
             int visibleTileCount = tilesWide * tilesHigh;
-            int streakCount = (int)(intensity * visibleTileCount * 0.02f);
+            // Streak count, length, and lifetime all scale with intensity
+            // Light rain: few short streaks. Heavy rain: many long streaks.
+            float streakDensity = 0.003f + intensity * 0.012f; // linear — drizzle still visible, heavy is dense
+            int streakCount = (int)(streakDensity * visibleTileCount);
+            float invTile = 1f / tileSize;
             for (int i = 0; i < streakCount && _activeCount < MaxParticles; i++)
             {
+                float wx = worldLeft + (float)_rng.NextDouble() * (worldRight - worldLeft);
+                float wy = worldTop + (float)_rng.NextDouble() * (worldBottom - worldTop);
+                int stx = (int)(wx * invTile);
+                int sty = (int)(wy * invTile);
+                if (!map.IsInBounds(stx, sty)) continue;
+                if (IsPlayerIndoorTile(map, stx, sty)) continue;
+
                 ref var p = ref _particles[_activeCount++];
-                p.WorldX = worldLeft + (float)_rng.NextDouble() * (worldRight - worldLeft);
-                p.WorldY = worldTop + (float)_rng.NextDouble() * (worldBottom - worldTop);
-                p.ScreenX = (int)(p.WorldX - camX);
-                p.ScreenY = (int)(p.WorldY - camY);
+                p.WorldX = wx;
+                p.WorldY = wy;
+                p.ScreenX = (int)(wx - camX);
+                p.ScreenY = (int)(wy - camY);
                 p.Type = TypeStreak;
-                p.MaxLife = p.Life = 0.033f + (float)_rng.NextDouble() * 0.017f;
-                p.Size = (byte)(3 + _rng.Next(3));
-                p.DriftX = windDx;
-                p.DriftY = windDy;
+
+                // Depth layer: 1=far (small, faint, slow), 2=mid, 3=near (big, bright, fast)
+                byte depth = (byte)(1 + _rng.Next(3));
+                p.Size = depth;
+
+                float depthScale = depth / 3f; // 0.33, 0.67, 1.0
+                float baseLife = 0.6f - intensity * 0.15f;
+                p.MaxLife = p.Life = (baseLife + (float)_rng.NextDouble() * baseLife * 0.3f) * (1.3f - depthScale * 0.5f);
+
+                float fallSpeed = (280f + intensity * 150f) * (0.5f + depthScale * 0.5f);
+                p.DriftX = MathF.Sin(weather.WindAngle) * fallSpeed;
+                p.DriftY = MathF.Cos(weather.WindAngle) * fallSpeed;
+            }
+
+            // Ground splashes at high intensity
+            if (intensity > 0.25f)
+            {
+                float splashRate = (intensity - 0.25f) / 0.75f * 20f; // 0-20 per frame
+                int splashSpawn = (int)splashRate;
+                if (_rng.NextDouble() < splashRate - splashSpawn) splashSpawn++;
+                for (int i = 0; i < splashSpawn && _activeCount < MaxParticles; i++)
+                {
+                    float wx = worldLeft + (float)_rng.NextDouble() * (worldRight - worldLeft);
+                    float wy = worldTop + (float)_rng.NextDouble() * (worldBottom - worldTop);
+                    int stx = (int)(wx * invTile);
+                    int sty = (int)(wy * invTile);
+                    if (!map.IsInBounds(stx, sty)) continue;
+                    if (IsPlayerIndoorTile(map, stx, sty)) continue;
+
+                    ref var p = ref _particles[_activeCount++];
+                    p.WorldX = wx;
+                    p.WorldY = wy;
+                    p.ScreenX = (int)(wx - camX);
+                    p.ScreenY = (int)(wy - camY);
+                    p.Type = TypeSplash;
+                    p.MaxLife = p.Life = 0.08f + (float)_rng.NextDouble() * 0.05f; // ~5-8 frames
+                    p.Size = 0;
+                    p.DriftX = 0;
+                    p.DriftY = 0;
+                }
             }
         }
 
         // --- Snow ---
         if (isSnow && intensity > 0.01f)
         {
-            float snowSpawnRate = intensity * 200f;
+            // Low intensity: gentle. High intensity: blizzard density.
+            float snowSpawnRate = 150f + intensity * intensity * 3000f;
             float toSpawn = snowSpawnRate * deltaSeconds;
             int spawnCount = (int)toSpawn;
             if (_rng.NextDouble() < toSpawn - spawnCount) spawnCount++;
 
+            // Wind-driven fall direction (same as rain)
+            float snowWindX = MathF.Sin(weather.WindAngle);
+            float snowWindY = MathF.Cos(weather.WindAngle);
+
             for (int i = 0; i < spawnCount && _activeCount < MaxParticles; i++)
             {
+                float wx = worldLeft + (float)_rng.NextDouble() * (worldRight - worldLeft);
+                float wy = worldTop + (float)_rng.NextDouble() * (worldBottom - worldTop);
+                int stx = (int)(wx / tileSize);
+                int sty = (int)(wy / tileSize);
+                if (!map.IsInBounds(stx, sty)) continue;
+                if (IsPlayerIndoorTile(map, stx, sty)) continue;
+
                 ref var p = ref _particles[_activeCount++];
-                p.WorldX = worldLeft + (float)_rng.NextDouble() * (worldRight - worldLeft);
-                p.WorldY = worldTop + (float)_rng.NextDouble() * (worldBottom - worldTop);
-                p.ScreenX = (int)(p.WorldX - camX);
-                p.ScreenY = (int)(p.WorldY - camY);
-                bool settled = _rng.NextDouble() < 0.15;
+                p.WorldX = wx;
+                p.WorldY = wy;
+                p.ScreenX = (int)(wx - camX);
+                p.ScreenY = (int)(wy - camY);
+                bool settled = _rng.NextDouble() < (0.15 - intensity * 0.1); // less settling in blizzard
                 p.Type = settled ? TypeSettled : TypeFlake;
+
+                float baseLife = 0.6f + intensity * 0.3f;
                 p.MaxLife = p.Life = settled
-                    ? 1.5f + (float)_rng.NextDouble() * 2f
-                    : 0.8f + (float)_rng.NextDouble() * 1.2f;
-                p.Size = (byte)(1 + _rng.Next(3));
-                p.DriftX = windDx * 20f + ((float)_rng.NextDouble() - 0.5f) * 8f;
-                p.DriftY = 25f + (float)_rng.NextDouble() * 20f + windDy * 15f;
+                    ? baseLife * 2f + (float)_rng.NextDouble() * baseLife
+                    : baseLife + (float)_rng.NextDouble() * baseLife * 0.5f;
+                p.Size = (byte)(2 + _rng.Next(1 + (int)(intensity * 2))); // 2-4px, bigger in blizzard
+
+                // Wind-driven: gentle at low intensity, strong at high
+                float snowSpeed = 20f + intensity * 80f;
+                float randomSpread = (1f - intensity * 0.5f) * 15f; // less random in blizzard (more uniform)
+                p.DriftX = snowWindX * snowSpeed + ((float)_rng.NextDouble() - 0.5f) * randomSpread;
+                p.DriftY = snowWindY * snowSpeed + 20f + intensity * 40f + (float)_rng.NextDouble() * 10f;
             }
         }
 
@@ -178,13 +246,10 @@ public class WeatherRenderer
         for (int i = _activeCount - 1; i >= 0; i--)
         {
             ref var p = ref _particles[i];
-            if (p.Type == TypeFlake || p.Type == TypeSettled)
-            {
-                p.WorldX += p.DriftX * deltaSeconds;
-                p.WorldY += p.DriftY * deltaSeconds;
-                if (p.Type == TypeFlake)
-                    p.WorldX += MathF.Sin(p.Life * 3f) * 2.5f * deltaSeconds;
-            }
+            p.WorldX += p.DriftX * deltaSeconds;
+            p.WorldY += p.DriftY * deltaSeconds;
+            if (p.Type == TypeFlake)
+                p.WorldX += MathF.Sin(p.Life * 3f) * 2.5f * deltaSeconds;
             p.ScreenX = (int)(p.WorldX - camX);
             p.ScreenY = (int)(p.WorldY - camY);
             p.Life -= deltaSeconds;
@@ -204,7 +269,9 @@ public class WeatherRenderer
     public void DrawGroundEffects(SpriteBatch spriteBatch, WeatherState weather, Camera camera,
         TileMap map, ushort playerZoneId, FogOfWar fow)
     {
-        if (_rippleSlotCount == 0) return;
+        _playerZoneId = playerZoneId;
+
+        if (_rippleSlotCount == 0 && _activeCount == 0) return;
 
         var device = spriteBatch.GraphicsDevice;
         int vpW = device.Viewport.Width;
@@ -218,10 +285,25 @@ public class WeatherRenderer
         float camPosY = camera.Position.Y;
         float invTS = 1f / tileSize;
 
+        // Roof exclusion: player's zone bounds + 1 tile margin (covers walls)
+        int rzx1 = 0, rzy1 = 0, rzx2 = 0, rzy2 = 0;
+        bool hasRoofZone = false;
+        if (playerZoneId != 0)
+        {
+            var pZone = map.GetZone(playerZoneId);
+            if (pZone != null && pZone.HasRoof)
+            {
+                hasRoofZone = true;
+                rzx1 = pZone.Bounds.X - 1;
+                rzy1 = pZone.Bounds.Y - 1;
+                rzx2 = pZone.Bounds.Right + 1;
+                rzy2 = pZone.Bounds.Bottom + 1;
+            }
+        }
+
         for (int i = 0; i < _rippleSlotCount; i++)
         {
             ref var slot = ref _rippleSlots[i];
-            // Snap to 2px grid for pixel-art consistency
             int sx = (int)(slot.WorldX - camPosX) & ~1;
             int sy = (int)(slot.WorldY - camPosY) & ~1;
 
@@ -231,9 +313,11 @@ public class WeatherRenderer
             int ttx = (int)(slot.WorldX * invTS);
             int tty = (int)(slot.WorldY * invTS);
             if (!fow.IsVisible(ttx, tty)) continue;
+            if (hasRoofZone && ttx >= rzx1 && ttx < rzx2 && tty >= rzy1 && tty < rzy2)
+                continue;
 
             // Puddle fill
-            int fillAlpha = (int)(weather.Intensity * 38);
+            int fillAlpha = (int)(weather.Intensity * 50);
             if (fillAlpha > 0)
                 DrawFilledEllipse(sx, sy, slot.RadiusX, slot.RadiusY,
                     new Color(80, 120, 155, fillAlpha), vpW, vpH);
@@ -245,15 +329,79 @@ public class WeatherRenderer
                     age, weather.Intensity, vpW, vpH);
         }
 
+        // All particles: streaks, splashes, snow
+        float invTileSize2 = 1f / tileSize;
+        for (int i = 0; i < _activeCount; i++)
+        {
+            ref var p = ref _particles[i];
+
+            int ptx = (int)(p.WorldX * invTileSize2);
+            int pty = (int)(p.WorldY * invTileSize2);
+            if (!map.IsInBounds(ptx, pty)) continue;
+            if (!fow.IsVisible(ptx, pty)) continue;
+            if (hasRoofZone && ptx >= rzx1 && ptx < rzx2 && pty >= rzy1 && pty < rzy2)
+                continue;
+
+            int sx = p.ScreenX;
+            int sy = p.ScreenY;
+            if (sx < -16 || sy < -16 || sx >= vpW + 16 || sy >= vpH + 16) continue;
+
+            switch (p.Type)
+            {
+                case TypeStreak:
+                    DrawRainStreak(sx, sy, p.Size, p.DriftX, p.DriftY, p.Life, p.MaxLife, vpW, vpH);
+                    break;
+
+                case TypeSplash:
+                {
+                    int spx = sx & ~1;
+                    int spy = sy & ~1;
+                    float age01 = 1f - p.Life / p.MaxLife;
+                    int baseAlpha = (int)(weather.Intensity * 150);
+
+                    if (age01 < 0.25f)
+                    {
+                        SetBlock2(spx, spy, new Color(170, 205, 235, baseAlpha), vpW, vpH);
+                    }
+                    else if (age01 < 0.55f)
+                    {
+                        int a = (int)(baseAlpha * 0.7f);
+                        var col = new Color(170, 205, 235, a);
+                        SetBlock2(spx, spy, col, vpW, vpH);
+                        SetBlock2(spx - 2, spy, col, vpW, vpH);
+                        SetBlock2(spx + 2, spy, col, vpW, vpH);
+                        SetBlock2(spx, spy - 2, col, vpW, vpH);
+                        SetBlock2(spx, spy + 2, col, vpW, vpH);
+                    }
+                    else
+                    {
+                        float fade = 1f - (age01 - 0.55f) / 0.45f;
+                        int a = (int)(baseAlpha * 0.4f * fade);
+                        if (a <= 0) break;
+                        var col = new Color(170, 205, 235, a);
+                        SetBlock2(spx - 4, spy, col, vpW, vpH);
+                        SetBlock2(spx + 4, spy, col, vpW, vpH);
+                        SetBlock2(spx, spy - 4, col, vpW, vpH);
+                        SetBlock2(spx, spy + 4, col, vpW, vpH);
+                    }
+                    break;
+                }
+
+                case TypeFlake:
+                case TypeSettled:
+                    DrawSnowParticle(sx, sy, p.Size, p.Type, p.Life, p.MaxLife, vpW, vpH);
+                    break;
+            }
+        }
+
         _particleTexture.SetData(_particlePixels);
         spriteBatch.Draw(_particleTexture, Vector2.Zero, Color.White);
     }
 
     /// <summary>
-    /// Draws streaks, snow, atmosphere tint, lightning. Call AFTER lighting.
+    /// Draws atmosphere tint + lightning. Call AFTER lighting.
     /// </summary>
-    public void DrawOverlayEffects(SpriteBatch spriteBatch, WeatherState weather, Camera camera,
-        TileMap map, ushort playerZoneId, FogOfWar fow)
+    public void DrawOverlayEffects(SpriteBatch spriteBatch, WeatherState weather)
     {
         if (_pixel == null) return;
 
@@ -270,58 +418,6 @@ public class WeatherRenderer
             int tB = isSnow ? 25 : 30;
             int tA = (int)(_atmosphereFade * 64);
             spriteBatch.Draw(_pixel, new Rectangle(0, 0, vpW, vpH), new Color(tR, tG, tB, tA));
-        }
-
-        if (_activeCount > 0)
-        {
-            EnsureTexture(device, vpW, vpH);
-            Array.Clear(_particlePixels, 0, _particlePixels.Length);
-
-            float invTileSize = 1f / GameConfig.TileSize;
-
-            int zx1 = 0, zy1 = 0, zx2 = 0, zy2 = 0;
-            bool hasPlayerRoof = false;
-            if (playerZoneId != 0)
-            {
-                var playerZone = map.GetZone(playerZoneId);
-                if (playerZone != null && playerZone.HasRoof)
-                {
-                    hasPlayerRoof = true;
-                    zx1 = playerZone.Bounds.X - 1;
-                    zy1 = playerZone.Bounds.Y - 1;
-                    zx2 = playerZone.Bounds.Right + 1;
-                    zy2 = playerZone.Bounds.Bottom + 1;
-                }
-            }
-
-            for (int i = 0; i < _activeCount; i++)
-            {
-                ref var p = ref _particles[i];
-                int sx = p.ScreenX;
-                int sy = p.ScreenY;
-                if (sx < -8 || sy < -8 || sx >= vpW + 8 || sy >= vpH + 8) continue;
-
-                if (hasPlayerRoof)
-                {
-                    int tileX = (int)(p.WorldX * invTileSize);
-                    int tileY = (int)(p.WorldY * invTileSize);
-                    if (tileX >= zx1 && tileX < zx2 && tileY >= zy1 && tileY < zy2) continue;
-                }
-
-                switch (p.Type)
-                {
-                    case TypeStreak:
-                        DrawRainStreak(sx, sy, p.Size, p.DriftX, p.DriftY, p.Life, p.MaxLife, vpW, vpH);
-                        break;
-                    case TypeFlake:
-                    case TypeSettled:
-                        DrawSnowParticle(sx, sy, p.Size, p.Type, p.Life, p.MaxLife, vpW, vpH);
-                        break;
-                }
-            }
-
-            _particleTexture.SetData(_particlePixels);
-            spriteBatch.Draw(_particleTexture, Vector2.Zero, Color.White);
         }
 
         // Lightning flash
@@ -342,22 +438,15 @@ public class WeatherRenderer
             int ttx = (int)(wx / tileSize);
             int tty = (int)(wy / tileSize);
             if (!map.IsInBounds(ttx, tty)) continue;
-            var tile = map.GetTile(ttx, tty);
-            if (tile.HasWall) continue;
-            if (tile.ZoneId != 0)
-            {
-                var zone = map.GetZone(tile.ZoneId);
-                if (zone != null && zone.HasRoof) continue;
-            }
+            if (IsPlayerIndoorTile(map, ttx, tty)) continue;
             slot.WorldX = wx;
             slot.WorldY = wy;
             slot.BirthFrame = _frameCount;
             slot.Interval = 10 + _rng.Next(7);
-            slot.RadiusX = 3 + _rng.Next(4);
+            slot.RadiusX = 4 + _rng.Next(4);
             slot.RadiusY = Math.Max(2, (int)(slot.RadiusX * 0.55f));
             return;
         }
-        // Failed — just reset the timer so it tries again next cycle
         slot.BirthFrame = _frameCount;
     }
 
@@ -371,20 +460,14 @@ public class WeatherRenderer
             int ttx = (int)(wx / tileSize);
             int tty = (int)(wy / tileSize);
             if (!map.IsInBounds(ttx, tty)) continue;
-            var tile = map.GetTile(ttx, tty);
-            if (tile.HasWall) continue;
-            if (tile.ZoneId != 0)
-            {
-                var zone = map.GetZone(tile.ZoneId);
-                if (zone != null && zone.HasRoof) continue;
-            }
+            if (IsPlayerIndoorTile(map, ttx, tty)) continue;
 
             ref var slot = ref _rippleSlots[_rippleSlotCount++];
             slot.WorldX = wx;
             slot.WorldY = wy;
             slot.BirthFrame = _frameCount;
             slot.Interval = 10 + _rng.Next(7);
-            slot.RadiusX = 3 + _rng.Next(4);
+            slot.RadiusX = 4 + _rng.Next(4);
             slot.RadiusY = Math.Max(2, (int)(slot.RadiusX * 0.55f));
             return;
         }
@@ -401,7 +484,7 @@ public class WeatherRenderer
         if (rippleAge <= 1)
         {
             // Impact: bright 2x2 dot at center
-            alpha01 = 0.5f;
+            alpha01 = 0.6f;
             int a = (int)(alpha01 * intensity * 255);
             if (a <= 0) return;
             SetBlock2(cx, cy, new Color(180, 210, 230, a), vpW, vpH);
@@ -409,21 +492,18 @@ public class WeatherRenderer
         }
         else if (rippleAge <= 5)
         {
-            // Expand to 60%
             radiusScale = 0.6f * ((rippleAge - 2) / 3f);
-            alpha01 = 0.35f;
+            alpha01 = 0.45f;
         }
         else if (rippleAge <= 9)
         {
-            // Expand to 100%
             radiusScale = 0.6f + 0.4f * ((rippleAge - 6) / 3f);
-            alpha01 = 0.35f - 0.2f * ((rippleAge - 6) / 3f);
+            alpha01 = 0.45f - 0.25f * ((rippleAge - 6) / 3f);
         }
         else
         {
-            // Expand to 120%, fade out
             radiusScale = 1.0f + 0.2f * ((rippleAge - 10) / 1f);
-            alpha01 = 0.15f * (1f - (rippleAge - 10) / 1f);
+            alpha01 = 0.2f * (1f - (rippleAge - 10) / 1f);
         }
 
         int alpha = (int)(alpha01 * intensity * 255);
@@ -541,37 +621,56 @@ public class WeatherRenderer
             _particlePixels[y * vpW + x] = color;
     }
 
+    /// <summary>
+    /// Returns true if this tile should block weather spawning
+    /// (player's indoor zone + its walls, or out of bounds).
+    /// </summary>
+    private bool IsPlayerIndoorTile(TileMap map, int tx, int ty)
+    {
+        if (_playerZoneId == 0) return false;
+        var pZone = map.GetZone(_playerZoneId);
+        if (pZone == null || !pZone.HasRoof) return false;
+        // Check expanded bounds (zone + 1 tile wall margin)
+        return tx >= pZone.Bounds.X - 1 && tx < pZone.Bounds.Right + 1 &&
+               ty >= pZone.Bounds.Y - 1 && ty < pZone.Bounds.Bottom + 1;
+    }
+
     // --- Streak / Snow drawing ---
 
-    private void DrawRainStreak(int sx, int sy, int length, float windDx, float windDy,
+    private void DrawRainStreak(int sx, int sy, int depth, float windDx, float windDy,
         float life, float maxLife, int vpW, int vpH)
     {
-        float ageRatio = 1f - life / maxLife;
-        int alpha = (int)(180 * (1f - ageRatio));
-        if (alpha <= 0) return;
-        var color = new Color(190, 215, 235, alpha);
+        // depth: 1=far, 2=mid, 3=near
+        float depthScale = depth / 3f;
 
-        int stepX, stepY;
-        float windMag = MathF.Sqrt(windDx * windDx + windDy * windDy);
-        if (windMag > 0.05f)
-        {
-            float nx = windDx / windMag;
-            float ny = windDy / windMag;
-            stepX = nx >= 0 ? 1 : -1;
-            stepY = Math.Abs(ny) > 0.3f ? (ny >= 0 ? 2 : -2) : (ny >= 0 ? 1 : -1);
-        }
-        else
-        {
-            stepX = 1;
-            stepY = 2;
-        }
+        // Far drops: shorter (2px), faint. Near drops: longer (4px), bright.
+        int length = 2 + depth;
+        int maxAlpha = (int)(80 + depthScale * 130); // far=123, mid=167, near=210
 
-        int px = sx, py = sy;
+        float lifeRatio = life / maxLife;
+        float lifeFade = lifeRatio * lifeRatio;
+
+        // Direction from drift
+        float driftMag = MathF.Sqrt(windDx * windDx + windDy * windDy);
+        float dirX = driftMag > 0.1f ? windDx / driftMag : 0f;
+        float dirY = driftMag > 0.1f ? windDy / driftMag : 1f;
+
+        // Pixel step size: far=2px, near=2px (same block size, length differs)
+        int px = sx & ~1, py = sy & ~1;
         for (int step = 0; step < length; step++)
         {
-            SetPixel(px, py, color, vpW, vpH);
-            px += stepX;
-            py += stepY;
+            float t = (float)step / (length - 1 + 0.001f);
+            float spatialFade = 0.3f + t * 0.7f;
+            int alpha = (int)(maxAlpha * lifeFade * spatialFade);
+            if (alpha <= 0) continue;
+            // Far drops slightly desaturated, near drops more vivid blue
+            int r = (int)(100 + (1f - depthScale) * 30); // far=130, near=100
+            int g = (int)(140 + (1f - depthScale) * 20); // far=160, near=140
+            int b = (int)(220 - (1f - depthScale) * 10); // far=210, near=220
+            var color = new Color(r, g, b, alpha);
+            SetBlock2(px, py, color, vpW, vpH);
+            px = (sx + (int)(dirX * (step + 1) * 2)) & ~1;
+            py = (sy + (int)(dirY * (step + 1) * 2)) & ~1;
         }
     }
 

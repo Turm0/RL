@@ -38,8 +38,17 @@ public class LightingSystem
         ("Torchlight",    new Vector3(0.12f, 0.10f, 0.08f)),
     };
 
+    // Weather modifies ambient light: darkening + color tint
+    private Vector3 _weatherAmbientMod = Vector3.One; // multiplier, 1.0 = no change
+
     public string CurrentAmbientName => AmbientModes[_ambientMode].Name;
     public Vector3 AmbientColor => _ambientColor;
+
+    /// <summary>
+    /// Sets a weather-based ambient multiplier. (1,1,1) = no change.
+    /// Rain: darken + blue shift. Snow: slight cool shift.
+    /// </summary>
+    public void SetWeatherAmbientMod(Vector3 mod) => _weatherAmbientMod = mod;
 
     public void CycleAmbient()
     {
@@ -106,7 +115,8 @@ public class LightingSystem
                     }
                 }
 
-                var ambient = isIndoor ? IndoorAmbient : _ambientColor;
+                var baseAmbient = isIndoor ? IndoorAmbient : _ambientColor;
+                var ambient = isIndoor ? baseAmbient : baseAmbient * _weatherAmbientMod;
 
                 // Fill all sub-tile pixels for this tile
                 int subX0 = tx * SubTileRes;

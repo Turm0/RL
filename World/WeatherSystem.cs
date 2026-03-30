@@ -30,12 +30,13 @@ public class WeatherSystem
     {
         (WeatherType.Clear,        0.0f),
         (WeatherType.Rain,         0.3f),
-        (WeatherType.Rain,         0.7f),
+        (WeatherType.Rain,         0.6f),
+        (WeatherType.Rain,         0.85f),
         (WeatherType.Rain,         1.0f),
-        (WeatherType.Thunderstorm, 0.6f),
+        (WeatherType.Thunderstorm, 0.7f),
         (WeatherType.Thunderstorm, 1.0f),
-        (WeatherType.Snow,         0.3f),
-        (WeatherType.Snow,         0.7f),
+        (WeatherType.Snow,         0.5f),
+        (WeatherType.Snow,         0.75f),
         (WeatherType.Snow,         1.0f),
     };
     private int _manualModeIndex;

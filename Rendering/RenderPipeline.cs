@@ -110,6 +110,26 @@ public class RenderPipeline
         // Update roof fade
         _roofRenderer.Update(gameTime, map, playerZoneId);
 
+        // Apply weather ambient modifier
+        if (_weatherState != null && _weatherState.Intensity > 0.01f)
+        {
+            float i = _weatherState.Intensity;
+            Vector3 mod = _weatherState.Type switch
+            {
+                // Rain: darken + blue shift (reduce R/G more than B)
+                WeatherType.Rain => new Vector3(1f - i * 0.3f, 1f - i * 0.25f, 1f - i * 0.1f),
+                WeatherType.Thunderstorm => new Vector3(1f - i * 0.45f, 1f - i * 0.4f, 1f - i * 0.15f),
+                // Snow: slight cool shift
+                WeatherType.Snow => new Vector3(1f - i * 0.1f, 1f - i * 0.05f, 1f + i * 0.05f),
+                _ => Vector3.One
+            };
+            _lightingSystem.SetWeatherAmbientMod(mod);
+        }
+        else
+        {
+            _lightingSystem.SetWeatherAmbientMod(Vector3.One);
+        }
+
         // Compute lighting
         _lightingSystem.Resize(visibleRect.Width, visibleRect.Height, _graphicsDevice);
         _lightingSystem.BeginFrame(visibleRect, map);
@@ -161,12 +181,12 @@ public class RenderPipeline
         // Draw scene
         _graphicsDevice.Clear(Color.Black);
 
-        // 1. Terrain
+        // 1. Terrain + entities
         _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
         _terrainRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar, time);
         _spriteBatch.End();
 
-        // 2. Rain puddles — ground effects, between terrain and entities so they appear under characters
+        // 2. Weather ground effects (puddles, streaks, snow — between terrain and entities)
         if (_weatherState != null && _weatherState.Intensity > 0.01f)
         {
             _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
@@ -181,28 +201,28 @@ public class RenderPipeline
             (tx, ty) => _roofRenderer.IsHiddenByRoof(map, tx, ty, playerZoneId));
         _spriteBatch.End();
 
-        // 3. Lighting overlay (multiply blend)
+        // 4. Lighting overlay (multiply blend)
         _lightingSystem.Draw(_spriteBatch, _camera, tileSize);
 
-        // 4. Effect overlays AFTER lighting — snow/wet/etc covers everything on the tile
+        // 5. Effect overlays AFTER lighting
         _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
         _effectOverlayRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar, time);
         _spriteBatch.End();
 
-        // 5. Roofs on top of everything
+        // 6. Roofs on top of everything
         _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
         _roofRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar, _lightingSystem.AmbientColor);
         _spriteBatch.End();
 
-        // 6. Weather particles (streaks/snow) + atmosphere tint + lightning flash — screen-space
+        // 7. Atmosphere tint + lightning flash (screen-space)
         if (_weatherState != null && (_weatherState.Intensity > 0.01f || _weatherState.LightningFlash > 0.01f))
         {
             _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied);
-            _weatherRenderer.DrawOverlayEffects(_spriteBatch, _weatherState, _camera, map, playerZoneId, _fogOfWar);
+            _weatherRenderer.DrawOverlayEffects(_spriteBatch, _weatherState);
             _spriteBatch.End();
         }
 
-        // 6. HUD
+        // 8. HUD
         if (_font != null)
         {
             _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);

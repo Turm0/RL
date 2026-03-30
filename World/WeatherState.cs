@@ -65,6 +65,11 @@ public class WeatherState
     {
         _targetType = type;
         _targetIntensity = Math.Clamp(intensity, 0f, 1f);
+
+        // Pick a new wind direction when weather type changes
+        // Range: -0.4 to +0.4 radians (~±23 degrees from vertical)
+        if (type != Type)
+            WindAngle = ((float)_rng.NextDouble() - 0.5f) * 0.8f;
         _transitionDuration = Math.Max(durationSeconds, 0.01f);
         _transitionProgress = 0f;
         _startIntensity = Intensity;
@@ -132,11 +137,14 @@ public class WeatherState
             if (LightningFlash < 0f) LightningFlash = 0f;
         }
 
-        // Gentle wind drift
-        WindAngle += (float)(_rng.NextDouble() - 0.5) * 0.1f * deltaSeconds;
+        // Wind drift — slow wandering within ±23 degrees of vertical
+        float driftRate = Type == WeatherType.Thunderstorm ? 0.03f : 0.008f;
+        WindAngle += (float)(_rng.NextDouble() - 0.5) * driftRate * deltaSeconds;
+        WindAngle = Math.Clamp(WindAngle, -0.4f, 0.4f);
+
         float targetWind = Type == WeatherType.Thunderstorm ? 0.6f + Intensity * 0.4f
             : Type == WeatherType.Clear ? 0.05f
             : 0.1f + Intensity * 0.3f;
-        WindStrength += (targetWind - WindStrength) * deltaSeconds * 0.5f;
+        WindStrength += (targetWind - WindStrength) * deltaSeconds * 0.3f;
     }
 }
