@@ -10,6 +10,7 @@ namespace RoguelikeEngine.Rendering;
 public class TextureCache
 {
     private readonly Dictionary<string, Texture2D> _cache = new();
+    private readonly Dictionary<long, Texture2D> _longCache = new();
 
     /// <summary>
     /// Returns a cached texture for the key, or creates and caches one using the factory.
@@ -20,6 +21,19 @@ public class TextureCache
         {
             tex = factory();
             _cache[key] = tex;
+        }
+        return tex;
+    }
+
+    /// <summary>
+    /// Returns a cached texture for the numeric key, or creates and caches one using the factory.
+    /// </summary>
+    public Texture2D GetOrCreate(long key, Func<Texture2D> factory)
+    {
+        if (!_longCache.TryGetValue(key, out var tex))
+        {
+            tex = factory();
+            _longCache[key] = tex;
         }
         return tex;
     }
@@ -37,5 +51,8 @@ public class TextureCache
         foreach (var tex in _cache.Values)
             tex.Dispose();
         _cache.Clear();
+        foreach (var tex in _longCache.Values)
+            tex.Dispose();
+        _longCache.Clear();
     }
 }

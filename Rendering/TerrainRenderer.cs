@@ -20,8 +20,8 @@ public class TerrainRenderer
         _generator.SetMap(map);
     }
 
-    // Animated tile frame caches: key → Texture2D[] (4 frames)
-    private readonly Dictionary<string, Texture2D[]> _animCache = new();
+    // Animated tile frame caches: key → Texture2D[] (8 frames)
+    private readonly Dictionary<long, Texture2D[]> _animCache = new();
     private const int AnimFrameCount = 8;
     private const float AnimFps = 1.5f;
 
@@ -50,7 +50,7 @@ public class TerrainRenderer
 
                 var tile = map.GetTile(x, y);
                 var neighbors = NeighborContext.FromMap(map, x, y);
-                string cacheKey = TerrainTextureGenerator.BuildCacheKey(tile, neighbors);
+                long cacheKey = TerrainTextureGenerator.BuildCacheKey(tile, neighbors);
 
                 Texture2D texture;
 
@@ -68,7 +68,8 @@ public class TerrainRenderer
                 }
                 else
                 {
-                    string memKey = "mem_" + cacheKey;
+                    // Use a distinct key space for memory textures by flipping the sign bit
+                    long memKey = cacheKey | unchecked((long)0x8000000000000000);
                     texture = _memoryCache.GetOrCreate(memKey, () =>
                         _generator.GenerateMemory(spriteBatch.GraphicsDevice, tile, neighbors, x, y));
                 }
@@ -80,16 +81,16 @@ public class TerrainRenderer
         }
     }
 
-    private Texture2D GetAnimatedFrame(GraphicsDevice device, string baseKey, TileData tile,
+    private Texture2D GetAnimatedFrame(GraphicsDevice device, long baseKey, TileData tile,
         NeighborContext neighbors, int worldX, int worldY, int frame)
     {
         if (!_animCache.TryGetValue(baseKey, out var frames))
         {
             frames = new Texture2D[AnimFrameCount];
-            for (int f = 0; f < AnimFrameCount; f++)
-                frames[f] = _generator.GenerateAnimated(device, tile, neighbors, worldX, worldY, null, f, AnimFrameCount);
             _animCache[baseKey] = frames;
         }
+        if (frames[frame] == null)
+            frames[frame] = _generator.GenerateAnimated(device, tile, neighbors, worldX, worldY, null, frame, AnimFrameCount);
         return frames[frame];
     }
 

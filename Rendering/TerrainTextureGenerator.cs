@@ -494,10 +494,17 @@ public class TerrainTextureGenerator
     public Texture2D GenerateMemory(GraphicsDevice device, TileData tile, NeighborContext neighbors,
         int worldX, int worldY)
     {
-        var baseTex = Generate(device, tile, neighbors, worldX, worldY, null);
         var pixels = new Color[Size * Size];
-        baseTex.GetData(pixels);
-        baseTex.Dispose();
+
+        if (tile.HasWall)
+            GenerateWall(pixels, tile, neighbors);
+        else if (IsLiquid(tile.Terrain))
+            GenerateLiquid(pixels, tile, 0, 1, worldX, worldY);
+        else
+            GenerateTerrain(pixels, tile);
+
+        if (!tile.HasWall)
+            BlendTerrainEdgesWorld(pixels, tile, neighbors, worldX, worldY);
 
         ToGrayscale(pixels);
 
@@ -663,9 +670,14 @@ public class TerrainTextureGenerator
         return h ^ (h >> 16);
     }
 
-    public static string BuildCacheKey(TileData tile, NeighborContext neighbors)
+    public static long BuildCacheKey(TileData tile, NeighborContext neighbors)
     {
+        // Neighbor hash uses bits 0-39 (8 terrains × 4 bits + 8 wall flags)
+        // Tile data packed into bits 40-62: terrain (4 bits) + wall (3 bits) + variantSeed (16 bits)
         long neighborHash = neighbors.GetHash();
-        return $"{(byte)tile.Terrain}_{(byte)tile.Wall}_{tile.VariantSeed}_{neighborHash}";
+        long tileData = (long)(byte)tile.Terrain
+                      | ((long)(byte)tile.Wall << 4)
+                      | ((long)tile.VariantSeed << 7);
+        return neighborHash | (tileData << 40);
     }
 }
