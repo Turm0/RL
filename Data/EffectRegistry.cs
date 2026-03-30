@@ -58,6 +58,7 @@ public static class EffectRegistry
             TintColor = new Color(20, 18, 15),
             OverlayPattern = TerrainPattern.Organic
         });
+
     }
 
     private static void Register(EffectDefinition def) => _defs[def.Type] = def;

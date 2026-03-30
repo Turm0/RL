@@ -3,6 +3,7 @@ using Microsoft.Xna.Framework.Graphics;
 using RoguelikeEngine.Core;
 using RoguelikeEngine.ECS.Components;
 using RoguelikeEngine.World;
+using System;
 
 namespace RoguelikeEngine.Rendering;
 
@@ -13,12 +14,15 @@ public class RenderPipeline
     private EntityRenderer _entityRenderer;
     private RoofRenderer _roofRenderer;
     private EffectOverlayRenderer _effectOverlayRenderer;
+    private WeatherRenderer _weatherRenderer;
     private LightingSystem _lightingSystem;
     private FogOfWar _fogOfWar;
     private SpriteBatch _spriteBatch;
     private GraphicsDevice _graphicsDevice;
     private GameWindow _window;
     private SpriteFont _font;
+    private WeatherState _weatherState;
+    private TileMap _map;
 
     private const int FovRadius = 60;
 
@@ -40,14 +44,22 @@ public class RenderPipeline
             ViewportHeight = graphicsDevice.Viewport.Height
         };
 
+        _map = map;
         _terrainRenderer = new TerrainRenderer(map);
         _entityRenderer = new EntityRenderer(new VectorRasterizer(), new TextureCache());
         _roofRenderer = new RoofRenderer();
         _effectOverlayRenderer = new EffectOverlayRenderer();
+        _weatherRenderer = new WeatherRenderer();
+        _weatherRenderer.Initialize(graphicsDevice);
         _lightingSystem = new LightingSystem();
         _fogOfWar = new FogOfWar(map.Width, map.Height);
 
         _window.ClientSizeChanged += OnClientSizeChanged;
+    }
+
+    public void SetWeatherState(WeatherState weatherState)
+    {
+        _weatherState = weatherState;
     }
 
     private void OnClientSizeChanged(object sender, System.EventArgs e)
@@ -59,6 +71,13 @@ public class RenderPipeline
     public void Update(GameTime gameTime)
     {
         _camera.Update(gameTime);
+
+        if (_weatherState != null)
+        {
+            float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
+            _weatherRenderer.Update(dt, _weatherState, _camera,
+                _graphicsDevice.Viewport.Width, _graphicsDevice.Viewport.Height, _map);
+        }
     }
 
     public void UpdateFov(int playerTileX, int playerTileY, TileMap map)
@@ -142,28 +161,48 @@ public class RenderPipeline
         // Draw scene
         _graphicsDevice.Clear(Color.Black);
 
-        // 1. Terrain + entities
+        // 1. Terrain
         _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
         _terrainRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar, time);
+        _spriteBatch.End();
+
+        // 2. Rain puddles — ground effects, between terrain and entities so they appear under characters
+        if (_weatherState != null && _weatherState.Intensity > 0.01f)
+        {
+            _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
+            _weatherRenderer.DrawGroundEffects(_spriteBatch, _weatherState, _camera, map, playerZoneId, _fogOfWar);
+            _spriteBatch.End();
+        }
+
+        // 3. Entities
         float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
+        _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
         _entityRenderer.Draw(_spriteBatch, _camera, ecsWorld, tileSize, _fogOfWar, dt,
             (tx, ty) => _roofRenderer.IsHiddenByRoof(map, tx, ty, playerZoneId));
         _spriteBatch.End();
 
-        // 2. Lighting overlay (multiply blend)
+        // 3. Lighting overlay (multiply blend)
         _lightingSystem.Draw(_spriteBatch, _camera, tileSize);
 
-        // 3. Effect overlays AFTER lighting — snow/wet/etc covers everything on the tile
+        // 4. Effect overlays AFTER lighting — snow/wet/etc covers everything on the tile
         _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
         _effectOverlayRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar, time);
         _spriteBatch.End();
 
-        // 4. Roofs on top of everything
+        // 5. Roofs on top of everything
         _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied, SamplerState.PointClamp);
         _roofRenderer.Draw(_spriteBatch, map, _camera, _fogOfWar, _lightingSystem.AmbientColor);
         _spriteBatch.End();
 
-        // 5. HUD
+        // 6. Weather particles (streaks/snow) + atmosphere tint + lightning flash — screen-space
+        if (_weatherState != null && (_weatherState.Intensity > 0.01f || _weatherState.LightningFlash > 0.01f))
+        {
+            _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.NonPremultiplied);
+            _weatherRenderer.DrawOverlayEffects(_spriteBatch, _weatherState, _camera, map, playerZoneId, _fogOfWar);
+            _spriteBatch.End();
+        }
+
+        // 6. HUD
         if (_font != null)
         {
             _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend);
@@ -180,7 +219,10 @@ public class RenderPipeline
                     break;
                 }
             }
-            string text = $"Light: {_lightingSystem.CurrentAmbientName} [L]  Move: {moveType} [M]";
+            string weatherInfo = _weatherState != null && _weatherState.Type != WeatherType.Clear
+                ? $"  Weather: {_weatherState.Type} {_weatherState.Intensity:F1} [F2]"
+                : "  Weather: Clear [F2]";
+            string text = $"Light: {_lightingSystem.CurrentAmbientName} [L]  Move: {moveType} [M]{weatherInfo}";
             _spriteBatch.DrawString(_font, text, new Vector2(12, 12), Color.Black);
             _spriteBatch.DrawString(_font, text, new Vector2(10, 10), Color.White);
             _spriteBatch.End();

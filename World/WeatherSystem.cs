@@ -1,73 +1,109 @@
 using System;
 using Microsoft.Xna.Framework;
-using RoguelikeEngine.Data;
-using RoguelikeEngine.Rendering;
 
 namespace RoguelikeEngine.World;
 
 /// <summary>
-/// Dynamically changes terrain effect intensities over time.
-/// Currently drives a snow cycle in a specified region.
+/// Drives weather transitions based on the world clock and season.
+/// Supports manual override cycling for testing.
 /// </summary>
 public class WeatherSystem
 {
-    private readonly TileMap _map;
-    private readonly EffectOverlayRenderer _overlayRenderer;
+    private readonly WorldClock _clock;
+    private readonly WeatherState _state;
+    private readonly Random _rng = new();
 
-    // Snow cycle region
-    private readonly int _snowX1, _snowY1, _snowX2, _snowY2;
-    private float _snowPhase;
-    private float _lastSnowIntensity = -1f;
+    // Auto-progression
+    private float _nextChangeIn;
+    private bool _manualOverride;
 
-    // Cycle period in seconds (full increase + decrease)
-    private const float CyclePeriod = 30f;
-
-    public WeatherSystem(TileMap map, EffectOverlayRenderer overlayRenderer,
-        int snowX1, int snowY1, int snowX2, int snowY2)
+    // Season-based weather weights: [Clear, Rain, Thunderstorm, Snow]
+    private static readonly float[][] SeasonWeights =
     {
-        _map = map;
-        _overlayRenderer = overlayRenderer;
-        _snowX1 = snowX1;
-        _snowY1 = snowY1;
-        _snowX2 = snowX2;
-        _snowY2 = snowY2;
+        new[] { 0.40f, 0.35f, 0.10f, 0.15f }, // Spring
+        new[] { 0.55f, 0.20f, 0.20f, 0.05f }, // Summer
+        new[] { 0.30f, 0.40f, 0.15f, 0.15f }, // Autumn
+        new[] { 0.25f, 0.10f, 0.05f, 0.60f }, // Winter
+    };
+
+    private static readonly (WeatherType Type, float Intensity)[] ManualModes =
+    {
+        (WeatherType.Clear,        0.0f),
+        (WeatherType.Rain,         0.3f),
+        (WeatherType.Rain,         0.7f),
+        (WeatherType.Rain,         1.0f),
+        (WeatherType.Thunderstorm, 0.6f),
+        (WeatherType.Thunderstorm, 1.0f),
+        (WeatherType.Snow,         0.3f),
+        (WeatherType.Snow,         0.7f),
+        (WeatherType.Snow,         1.0f),
+    };
+    private int _manualModeIndex;
+
+    public WeatherState State => _state;
+
+    public WeatherSystem(WorldClock clock)
+    {
+        _clock = clock;
+        _state = new WeatherState();
+        _state.Set(WeatherType.Clear, 0f);
+        _nextChangeIn = 60f + (float)_rng.NextDouble() * 120f;
     }
 
     public void Update(GameTime gameTime)
     {
         float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
-        _snowPhase += dt / CyclePeriod;
-        if (_snowPhase > 1f) _snowPhase -= 1f;
+        _state.Update(dt);
 
-        // Triangle wave: 0→1→0 over one cycle
-        float snowIntensity = _snowPhase < 0.5f
-            ? _snowPhase * 2f
-            : 2f - _snowPhase * 2f;
+        if (_manualOverride)
+            return;
 
-        // Quantize to 0.05 steps to avoid constant cache invalidation
-        float quantized = MathF.Round(snowIntensity * 20f) / 20f;
-        if (Math.Abs(quantized - _lastSnowIntensity) < 0.01f) return;
+        float gameMinutes = dt / _clock.TimeScale;
+        _nextChangeIn -= gameMinutes;
 
-        _lastSnowIntensity = quantized;
-
-        // Update snow intensity across the region
-        for (int x = _snowX1; x <= _snowX2; x++)
+        if (_nextChangeIn <= 0f)
         {
-            for (int y = _snowY1; y <= _snowY2; y++)
+            RollNewWeather();
+            _nextChangeIn = 30f + (float)_rng.NextDouble() * 150f;
+        }
+    }
+
+    public void CycleManual()
+    {
+        _manualOverride = true;
+        _manualModeIndex = (_manualModeIndex + 1) % ManualModes.Length;
+        var mode = ManualModes[_manualModeIndex];
+        _state.TransitionTo(mode.Type, mode.Intensity, 2f);
+    }
+
+    public void EnableAuto()
+    {
+        _manualOverride = false;
+        _nextChangeIn = 10f + (float)_rng.NextDouble() * 30f;
+    }
+
+    private void RollNewWeather()
+    {
+        var weights = SeasonWeights[(int)_clock.Season];
+        float roll = (float)_rng.NextDouble();
+        float cumulative = 0f;
+        WeatherType picked = WeatherType.Clear;
+
+        for (int i = 0; i < weights.Length; i++)
+        {
+            cumulative += weights[i];
+            if (roll <= cumulative)
             {
-                if (!_map.IsInBounds(x, y)) continue;
-                var tile = _map.GetTile(x, y);
-                if (tile.HasWall) continue;
-
-                // Slight spatial variation so it doesn't look uniform
-                float noiseOffset = ((x * 13 + y * 7) & 0xF) / 32f; // 0..0.5
-                float localIntensity = Math.Clamp(quantized + noiseOffset - 0.15f, 0f, 0.95f);
-
-                _map.SetEffect(x, y, TerrainEffectType.Snow, localIntensity);
+                picked = (WeatherType)i;
+                break;
             }
         }
 
-        // Invalidate overlay cache since intensities changed
-        _overlayRenderer.InvalidateAll();
+        float intensity = picked == WeatherType.Clear
+            ? 0f
+            : 0.2f + (float)_rng.NextDouble() * 0.8f;
+
+        float transitionTime = 8f + (float)_rng.NextDouble() * 12f;
+        _state.TransitionTo(picked, intensity, transitionTime);
     }
 }

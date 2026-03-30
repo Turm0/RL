@@ -16,6 +16,7 @@ public class RL : Game
     private DefaultEcs.World _ecsWorld;
     private TileMap _tileMap;
     private PlayerInputSystem _playerInputSystem;
+    private WorldClock _worldClock;
     private WeatherSystem _weatherSystem;
     private KeyboardState _prevKeyboard;
     private int _lastFovX = int.MinValue;
@@ -55,9 +56,9 @@ public class RL : Game
 
         _playerInputSystem = new PlayerInputSystem(_ecsWorld, _tileMap, _renderPipeline.Camera);
 
-        // Weather system disabled for now
-        // _weatherSystem = new WeatherSystem(_tileMap, _renderPipeline.EffectOverlay,
-        //     snowX1: 1, snowY1: 28, snowX2: 12, snowY2: 38);
+        _worldClock = new WorldClock();
+        _weatherSystem = new WeatherSystem(_worldClock);
+        _renderPipeline.SetWeatherState(_weatherSystem.State);
 
         _renderPipeline.UpdateFov(15, 18, _tileMap);
     }
@@ -358,9 +359,15 @@ public class RL : Game
         if (kb.IsKeyDown(Keys.M) && !_prevKeyboard.IsKeyDown(Keys.M))
             CycleMoveAnim();
 
+        // F2 key: cycle weather mode (manual override)
+        if (kb.IsKeyDown(Keys.F2) && !_prevKeyboard.IsKeyDown(Keys.F2))
+            _weatherSystem.CycleManual();
+
+        float dt = (float)gameTime.ElapsedGameTime.TotalSeconds;
+        _worldClock.Update(dt);
         _playerInputSystem.Update(gameTime);
         _renderPipeline.Update(gameTime);
-        _weatherSystem?.Update(gameTime);
+        _weatherSystem.Update(gameTime);
         UpdatePlayerFov();
 
         _prevKeyboard = kb;

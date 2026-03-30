@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using RoguelikeEngine.Core;
@@ -51,10 +50,8 @@ public class EffectOverlayRenderer
                 {
                     if (effect.Intensity <= 0.01f) continue;
 
-                    // Quantize for cache key
                     int qi = (int)(effect.Intensity * 10f + 0.5f);
                     string cacheKey = $"efx_{(byte)effect.Type}_{qi}_{TileMap.ComputeVariantSeed(x, y)}";
-
                     var texture = _cache.GetOrCreate(cacheKey, () =>
                         GenerateOverlay(spriteBatch.GraphicsDevice, effect, x, y));
 
