@@ -9,6 +9,7 @@ public struct TileData
     public WaterStyleId WaterStyle;
     public float WaterDepth; // 0..1, auto-computed from distance to shore
     public byte ElevationLayer; // 0 = open sky, 1+ = something above (roof, bridge, canopy)
+    public bool HasWindow; // wall tile has a window
 
     public TileData(TerrainId terrain, WallType wall = WallType.None, ushort variantSeed = 0, ushort zoneId = 0)
     {
@@ -19,6 +20,7 @@ public struct TileData
         WaterStyle = WaterStyleId.Clean;
         WaterDepth = 0f;
         ElevationLayer = 0;
+        HasWindow = false;
     }
 
     public bool HasWall => Wall != WallType.None;

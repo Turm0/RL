@@ -434,41 +434,42 @@ public class VectorRasterizer
 
     private static void DrawTorch(Image<Rgba32> img, float cx, float cy, float s)
     {
+        float t = s * 2.2f; // scale up to fill texture
         img.Mutate(ctx =>
         {
             // Stick
-            ctx.DrawLine(Color.FromRgba(100, 70, 40, 255), MathF.Max(2.5f * s, 1.5f),
-                new PointF[] { new(cx, cy + 2 * s), new(cx, cy + 10 * s) });
+            ctx.DrawLine(Color.FromRgba(60, 40, 25, 255), MathF.Max(3f * t, 2f),
+                new PointF[] { new(cx, cy + 2 * t), new(cx, cy + 10 * t) });
 
             // Mount bracket
-            ctx.Fill(Color.FromRgba(80, 80, 80, 255), new EllipsePolygon(cx, cy + 2 * s, 2.5f * s, 1.5f * s));
+            ctx.Fill(Color.FromRgba(80, 80, 80, 255), new EllipsePolygon(cx, cy + 2 * t, 3f * t, 2f * t));
 
             // Flame outer: orange
             var flameOuter = new Polygon(new PointF[]
             {
-                new(cx, cy - 8 * s),
-                new(cx + 3 * s, cy - 3 * s),
-                new(cx + 2.5f * s, cy + 1 * s),
-                new(cx, cy + 2 * s),
-                new(cx - 2.5f * s, cy + 1 * s),
-                new(cx - 3 * s, cy - 3 * s)
+                new(cx, cy - 9 * t),
+                new(cx + 4 * t, cy - 3 * t),
+                new(cx + 3 * t, cy + 1 * t),
+                new(cx, cy + 2 * t),
+                new(cx - 3 * t, cy + 1 * t),
+                new(cx - 4 * t, cy - 3 * t)
             });
             ctx.Fill(Color.FromRgba(255, 140, 0, 220), flameOuter);
 
             // Flame inner: yellow
             var flameInner = new Polygon(new PointF[]
             {
-                new(cx, cy - 5 * s),
-                new(cx + 1.5f * s, cy - 2 * s),
-                new(cx + 1.2f * s, cy + 0.5f * s),
-                new(cx, cy + 1.5f * s),
-                new(cx - 1.2f * s, cy + 0.5f * s),
-                new(cx - 1.5f * s, cy - 2 * s)
+                new(cx, cy - 6 * t),
+                new(cx + 2 * t, cy - 2 * t),
+                new(cx + 1.5f * t, cy + 0.5f * t),
+                new(cx, cy + 1.5f * t),
+                new(cx - 1.5f * t, cy + 0.5f * t),
+                new(cx - 2 * t, cy - 2 * t)
             });
             ctx.Fill(Color.FromRgba(255, 220, 80, 240), flameInner);
 
             // Core: bright white-yellow
-            ctx.Fill(Color.FromRgba(255, 255, 200, 255), new EllipsePolygon(cx, cy - 1 * s, 1 * s, 1.5f * s));
+            ctx.Fill(Color.FromRgba(255, 255, 200, 255), new EllipsePolygon(cx, cy - 1 * t, 1.5f * t, 2f * t));
         });
     }
 

@@ -365,6 +365,36 @@ public class TerrainTextureGenerator
             }
         }
 
+        // Window on south face
+        if (tile.HasWindow && !neighbors.WallS)
+        {
+            int winW = 10, winH = 8;
+            int winX = (Size - winW) / 2;
+            int winY = Size - 12 + 1; // near top of south face
+            var frameColor = new Color(50, 40, 30);
+            var glassColor = new Color(60, 80, 110);
+            var glassHighlight = new Color(90, 120, 160);
+
+            for (int wy = winY; wy < winY + winH; wy++)
+            {
+                for (int wx = winX; wx < winX + winW; wx++)
+                {
+                    if (wx < 0 || wx >= Size || wy < 0 || wy >= Size) continue;
+                    bool isFrame = wx == winX || wx == winX + winW - 1 ||
+                                   wy == winY || wy == winY + winH - 1 ||
+                                   wx == winX + winW / 2; // vertical divider
+                    if (isFrame)
+                        pixels[wy * Size + wx] = frameColor;
+                    else
+                    {
+                        // Glass with slight highlight in upper-left
+                        bool highlight = (wx - winX < winW / 3) && (wy - winY < winH / 3);
+                        pixels[wy * Size + wx] = highlight ? glassHighlight : glassColor;
+                    }
+                }
+            }
+        }
+
         PixelUtil.Pixelize(pixels, Size, def.PixelSize);
     }
 

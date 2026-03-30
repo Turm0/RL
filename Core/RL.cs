@@ -51,10 +51,11 @@ public class RL : Game
 
         SpawnEntities();
 
-        _renderPipeline.Camera.TargetTile = new Point(15, 18);
+        // Start player in the village square
+        _renderPipeline.Camera.TargetTile = new Point(40, 35);
         _renderPipeline.Camera.Position = new Vector2(
-            15 * GameConfig.TileSize + GameConfig.TileSize / 2f - _renderPipeline.Camera.ViewportWidth / 2f,
-            18 * GameConfig.TileSize + GameConfig.TileSize / 2f - _renderPipeline.Camera.ViewportHeight / 2f);
+            40 * GameConfig.TileSize + GameConfig.TileSize / 2f - _renderPipeline.Camera.ViewportWidth / 2f,
+            35 * GameConfig.TileSize + GameConfig.TileSize / 2f - _renderPipeline.Camera.ViewportHeight / 2f);
 
         _playerInputSystem = new PlayerInputSystem(_ecsWorld, _tileMap, _renderPipeline.Camera);
 
@@ -62,45 +63,60 @@ public class RL : Game
         _weatherSystem = new WeatherSystem(_worldClock);
         _renderPipeline.SetWeatherState(_weatherSystem.State);
 
-        _renderPipeline.UpdateFov(15, 18, _tileMap);
+        _renderPipeline.UpdateFov(40, 35, _tileMap);
     }
 
     private void SpawnEntities()
     {
-        // Player in the outdoor area
+        // Player in the village square
         var player = _ecsWorld.CreateEntity();
-        player.Set(new Position(15, 18));
+        player.Set(new Position(40, 35));
         player.Set(new SpriteShape("creatures/human_ranger.yaml", 1.0f));
         player.Set(new PlayerControlled());
         player.Set(new RenderLayer(RenderLayer.CreatureLayer));
         player.Set(new LightEmitter(10f, 1.0f, new Vector3(1.2f, 1.1f, 0.9f), true, 0.15f));
         player.Set(new MovementAnimation(12f, MoveAnimType.Slide));
 
-        // --- Outdoor NPCs ---
-        SpawnCreature(20, 17, "creatures/human_mage.yaml");
-        SpawnCreature(12, 22, "creatures/orc_warrior.yaml");
+        // --- Village NPCs ---
+        SpawnCreature(38, 33, "creatures/human_mage.yaml");
+        SpawnCreature(43, 36, "creatures/human_cleric.yaml");
+        SpawnCreature(35, 38, "creatures/human_thief.yaml");
 
-        // --- Cottage interior NPCs ---
-        SpawnCreature(7, 7, "creatures/human_knight.yaml");
-        SpawnCreature(9, 8, "creatures/dwarf_smith.yaml");
+        // --- House interiors ---
+        SpawnCreature(33, 27, "creatures/human_knight.yaml");   // House 1
+        SpawnCreature(51, 26, "creatures/dwarf_smith.yaml");     // Smithy
+        SpawnCreature(48, 44, "creatures/human_mage.yaml");      // House 3
 
-        // --- Cave NPCs ---
-        SpawnCreature(38, 8, "creatures/undead.yaml");
-        SpawnCreature(42, 11, "creatures/dark_elf.yaml");
+        // --- Tavern ---
+        SpawnCreature(35, 48, "creatures/human_thief.yaml");
+        SpawnCreature(39, 50, "creatures/human_cleric.yaml");
 
-        // --- Tavern NPCs ---
-        SpawnCreature(28, 29, "creatures/human_thief.yaml");
-        SpawnCreature(32, 31, "creatures/human_cleric.yaml");
+        // --- Mountain caves ---
+        SpawnCreature(25, 12, "creatures/undead.yaml");
+        SpawnCreature(30, 8, "creatures/undead.yaml");
+        SpawnCreature(18, 18, "creatures/dark_elf.yaml");
+        SpawnCreature(35, 15, "creatures/orc_warrior.yaml");
 
         // === Torches ===
-        SpawnTorch(8, 5);    // Cottage
-        SpawnTorch(17, 18);  // Village center
-        SpawnTorch(22, 17);  // Near path
-        SpawnTorch(36, 8);   // Cave entrance
-        SpawnTorch(40, 10);  // Deep cave
-        SpawnTorch(30, 28);  // Tavern
-        SpawnTorch(33, 32);  // Tavern back
+        // Village
+        SpawnTorch(37, 34);  // Square west
+        SpawnTorch(43, 34);  // Square east
+        SpawnTorch(40, 31);  // Square north
+        SpawnTorch(40, 39);  // Square south
 
+        // Houses
+        SpawnTorch(33, 26);  // House 1
+        SpawnTorch(51, 25);  // Smithy
+        SpawnTorch(48, 43);  // House 3
+
+        // Tavern
+        SpawnTorch(35, 47);
+        SpawnTorch(40, 50);
+
+        // Mountain/cave
+        SpawnTorch(28, 22);  // Cave entrance area
+        SpawnTorch(22, 15);  // Deep cave
+        SpawnTorch(32, 10);  // Upper cave
     }
 
     private DefaultEcs.Entity SpawnCreature(int x, int y, string creatureType, float size = 1.0f)
@@ -127,23 +143,237 @@ public class RL : Game
     {
         var entity = _ecsWorld.CreateEntity();
         entity.Set(new Position(x, y));
-        entity.Set(new SpriteShape("torch", 0.5f));
+        entity.Set(new SpriteShape("torch", 1.0f));
         entity.Set(new RenderLayer(RenderLayer.TerrainObjectLayer));
         entity.Set(new LightEmitter(8f, 1.1f, new Vector3(1.3f, 1.0f, 0.65f), true, 0.3f));
     }
 
     private static TileMap CreateDemoLevel()
     {
-        int W = 50, H = 40;
+        int W = 80, H = 60;
         var map = new TileMap(W, H);
 
-        // Fill with grass (outdoor default)
-        for (int x = 0; x < W; x++)
-            for (int y = 0; y < H; y++)
-                map.SetTile(x, y, new TileData(TerrainId.Grass, WallType.None,
-                    TileMap.ComputeVariantSeed(x, y)));
+        // ============================================================
+        // LAYOUT:
+        //   Top half (y=0..30):  Mountain with cave system
+        //   Bottom half (y=30..60): Village with river
+        //   River runs roughly north-south through the middle
+        // ============================================================
 
-        // --- Border walls ---
+        // === BASE TERRAIN ===
+        for (int x = 0; x < W; x++)
+        {
+            for (int y = 0; y < H; y++)
+            {
+                TerrainId terrain;
+                if (y < 25)
+                    terrain = TerrainId.Stone; // Mountain base
+                else if (y < 30)
+                    terrain = TerrainId.Dirt;  // Mountain-village transition
+                else
+                    terrain = TerrainId.Grass; // Village area
+
+                map.SetTile(x, y, new TileData(terrain, WallType.None,
+                    TileMap.ComputeVariantSeed(x, y)));
+            }
+        }
+
+        // === MOUNTAIN AREA (top) ===
+        // Fill mountain with cave walls — organic edge
+        for (int x = 1; x < W - 1; x++)
+        {
+            for (int y = 1; y < 28; y++)
+            {
+                // Organic mountain edge — noise-perturbed boundary
+                int h = TileMap.ComputeVariantSeed(x, y);
+                float noise = ((h & 0xFF) / 255f - 0.5f) * 4f;
+                float mountainEdge = 26 + noise + MathF.Sin(x * 0.3f) * 2f;
+
+                if (y < mountainEdge)
+                    SetWall(map, x, y, TerrainId.CaveFloor, WallType.CaveWall);
+            }
+        }
+
+        // === CAVE SYSTEM ===
+        // Main cavern (zone 10)
+        ushort mainCaveZone = 10;
+        int caveCX = 25, caveCY = 12;
+        int caveR = 8;
+        // Bounds cover both main + secondary caverns
+        int boundsX1 = Math.Min(caveCX - caveR - 1, 35 - 5 - 1);
+        int boundsY1 = Math.Min(caveCY - caveR - 1, 8 - 5 - 1);
+        int boundsX2 = Math.Max(caveCX + caveR + 2, 35 + 5 + 2);
+        int boundsY2 = caveCY + caveR + 2;
+        var mainCaveBounds = new Rectangle(boundsX1, boundsY1,
+            boundsX2 - boundsX1, boundsY2 - boundsY1);
+        map.RegisterZone(new ZoneDefinition
+        {
+            Id = mainCaveZone, HasRoof = true,
+            RoofMaterial = RoofMaterialType.CaveStone, Bounds = mainCaveBounds
+        });
+
+        // Carve main cavern
+        for (int x = mainCaveBounds.X; x < mainCaveBounds.Right; x++)
+        {
+            for (int y = mainCaveBounds.Y; y < mainCaveBounds.Bottom; y++)
+            {
+                if (!map.IsInBounds(x, y)) continue;
+                float dx = x - caveCX, dy = y - caveCY;
+                float dist = MathF.Sqrt(dx * dx + dy * dy);
+                int h = TileMap.ComputeVariantSeed(x, y);
+                float noise = ((h & 0xFF) / 255f - 0.5f) * 3f;
+                if (dist < caveR + noise)
+                    SetFloor(map, x, y, TerrainId.CaveFloor, mainCaveZone);
+            }
+        }
+
+        // Secondary cavern — part of the same cave system (same zone)
+        int cave2CX = 35, cave2CY = 8;
+        int cave2R = 5;
+
+        for (int x = cave2CX - cave2R - 1; x <= cave2CX + cave2R + 1; x++)
+        {
+            for (int y = cave2CY - cave2R - 1; y <= cave2CY + cave2R + 1; y++)
+            {
+                if (!map.IsInBounds(x, y)) continue;
+                float dx = x - cave2CX, dy = y - cave2CY;
+                float dist = MathF.Sqrt(dx * dx + dy * dy);
+                int h = TileMap.ComputeVariantSeed(x, y);
+                float noise = ((h & 0xFF) / 255f - 0.5f) * 2.5f;
+                if (dist < cave2R + noise)
+                    SetFloor(map, x, y, TerrainId.CaveFloor, mainCaveZone);
+            }
+        }
+
+        // Tunnel connecting main cavern to secondary cavern
+        for (int x = caveCX + caveR - 2; x <= cave2CX - cave2R + 2; x++)
+        {
+            int tunnelY = (int)(10 + MathF.Sin(x * 0.4f) * 1.5f);
+            SetFloor(map, x, tunnelY, TerrainId.CaveFloor, mainCaveZone);
+            SetFloor(map, x, tunnelY + 1, TerrainId.CaveFloor, mainCaveZone);
+        }
+
+        // Lava pool in secondary cavern
+        for (int x = 34; x <= 37; x++)
+            for (int y = 6; y <= 8; y++)
+                if (!map.GetTile(x, y).HasWall)
+                    SetFloor(map, x, y, TerrainId.Lava, mainCaveZone);
+
+        // Cave entrance — tunnel from mountain face down to village area
+        for (int y = caveCY + caveR - 2; y <= 28; y++)
+        {
+            int tunnelX = (int)(28 + MathF.Sin(y * 0.3f) * 1.5f);
+            SetFloor(map, tunnelX, y, TerrainId.CaveFloor, mainCaveZone);
+            SetFloor(map, tunnelX + 1, y, TerrainId.CaveFloor, mainCaveZone);
+            // Walls around tunnel
+            if (map.IsInBounds(tunnelX - 1, y) && map.GetTile(tunnelX - 1, y).HasWall)
+                SetWall(map, tunnelX - 1, y, TerrainId.CaveFloor, WallType.CaveWall);
+            if (map.IsInBounds(tunnelX + 2, y) && map.GetTile(tunnelX + 2, y).HasWall)
+                SetWall(map, tunnelX + 2, y, TerrainId.CaveFloor, WallType.CaveWall);
+        }
+        // Transition from cave to outdoors
+        for (int x = 27; x <= 30; x++)
+            for (int y = 27; y <= 30; y++)
+                if (map.GetTile(x, y).HasWall)
+                    SetFloor(map, x, y, TerrainId.Dirt);
+
+        // === RIVER (runs north-south through village, slight curve) ===
+        for (int y = 0; y < H; y++)
+        {
+            float riverCenterX = 55 + MathF.Sin(y * 0.08f) * 4f;
+            int riverWidth = y < 25 ? 2 : 3; // narrower in mountain
+
+            for (int dx = -riverWidth; dx <= riverWidth; dx++)
+            {
+                int rx = (int)(riverCenterX + dx);
+                if (!map.IsInBounds(rx, y)) continue;
+                if (map.GetTile(rx, y).HasWall) continue; // don't carve through mountain walls
+
+                TerrainId water = TerrainId.Water;
+                SetFloor(map, rx, y, water);
+            }
+
+            // Sandy banks
+            for (int side = -1; side <= 1; side += 2)
+            {
+                int bankX = (int)(riverCenterX + (riverWidth + 1) * side);
+                if (map.IsInBounds(bankX, y) && !map.GetTile(bankX, y).HasWall)
+                    SetFloor(map, bankX, y, TerrainId.Sand);
+            }
+        }
+
+        // === VILLAGE PATHS (dirt roads) ===
+        // Main east-west road
+        for (int x = 1; x < W - 1; x++)
+        {
+            if (map.GetTile(x, 35).HasWall) continue;
+            var t = map.GetTile(x, 35);
+            if (t.Terrain == TerrainId.Water || t.Terrain == TerrainId.DeepWater) continue;
+            SetFloor(map, x, 35, TerrainId.Dirt);
+            if (!map.GetTile(x, 36).HasWall) SetFloor(map, x, 36, TerrainId.Dirt);
+        }
+
+        // North-south village road
+        for (int y = 30; y < H - 1; y++)
+        {
+            SetFloor(map, 40, y, TerrainId.Dirt);
+            SetFloor(map, 41, y, TerrainId.Dirt);
+        }
+
+        // Path to mountain/cave entrance
+        for (int y = 28; y <= 35; y++)
+        {
+            SetFloor(map, 29, y, TerrainId.Dirt);
+            SetFloor(map, 30, y, TerrainId.Dirt);
+        }
+
+        // === VILLAGE BUILDINGS (well-spaced, minimum 3 tiles gap) ===
+
+        // House 1 — northwest of square (zone 1, wood cottage)
+        BuildHouse(map, 30, 25, 7, 5, 1, TerrainId.Wood, WallType.WoodWall,
+            RoofMaterialType.Thatch, doorSide: 2, doorOffset: 3); // door south
+
+        // Smithy — far east, north of road (zone 2, stone)
+        BuildHouse(map, 48, 24, 7, 5, 2, TerrainId.Stone, WallType.StoneWall,
+            RoofMaterialType.Slate, doorSide: 2, doorOffset: 3);
+
+        // House 3 — south of road, east side (zone 3, wood)
+        BuildHouse(map, 46, 42, 6, 5, 3, TerrainId.Wood, WallType.WoodWall,
+            RoofMaterialType.WoodShingle, doorSide: 0, doorOffset: 3); // door north
+
+        // Tavern — large, southwest (zone 4, brick)
+        BuildHouse(map, 32, 46, 10, 7, 4, TerrainId.Wood, WallType.BrickWall,
+            RoofMaterialType.ClayTile, doorSide: 0, doorOffset: 5); // door north
+
+        // Small house near river (zone 5)
+        BuildHouse(map, 60, 40, 5, 4, 5, TerrainId.Wood, WallType.WoodWall,
+            RoofMaterialType.Thatch, doorSide: 3, doorOffset: 2); // door west
+
+        // === VILLAGE SQUARE (stone paved area around the crossroads) ===
+        for (int x = 38; x <= 43; x++)
+            for (int y = 33; y <= 38; y++)
+                SetFloor(map, x, y, TerrainId.Stone);
+
+        // Pond — circular, west of village square
+        int pondCX = 28, pondCY = 36;
+        int pondR = 3;
+        for (int px = pondCX - pondR - 1; px <= pondCX + pondR + 1; px++)
+        {
+            for (int py = pondCY - pondR - 1; py <= pondCY + pondR + 1; py++)
+            {
+                if (!map.IsInBounds(px, py)) continue;
+                float dx = px - pondCX, dy = py - pondCY;
+                float dist = MathF.Sqrt(dx * dx + dy * dy);
+                int h = TileMap.ComputeVariantSeed(px, py);
+                float noise = ((h & 0xFF) / 255f - 0.5f) * 1.0f;
+                if (dist < pondR + noise)
+                    SetFloor(map, px, py, TerrainId.Water);
+                else if (dist < pondR + 1.2f + noise)
+                    SetFloor(map, px, py, TerrainId.Sand);
+            }
+        }
+
+        // === BORDER ===
         for (int x = 0; x < W; x++)
         {
             SetWall(map, x, 0, TerrainId.Stone, WallType.StoneWall);
@@ -155,195 +385,63 @@ public class RL : Game
             SetWall(map, W - 1, y, TerrainId.Stone, WallType.StoneWall);
         }
 
-        // === OUTDOOR AREA (center, y=13..26) ===
-        // Dirt path running east-west
-        for (int x = 1; x < W - 1; x++)
-            for (int dy = -1; dy <= 1; dy++)
-                SetFloor(map, x, 18 + dy, TerrainId.Dirt);
-
-        // Dirt path running north-south
-        for (int y = 1; y < H - 1; y++)
-            SetFloor(map, 15, y, TerrainId.Dirt);
-        for (int y = 1; y < H - 1; y++)
-            SetFloor(map, 16, y, TerrainId.Dirt);
-
-        // Pond — just Water tiles, depth computed automatically
-        for (int x = 6; x <= 10; x++)
-            for (int y = 17; y <= 21; y++)
-                SetFloor(map, x, y, TerrainId.Water);
-
-        // Sandy beach around pond
-        for (int x = 5; x <= 11; x++)
-        {
-            SetFloor(map, x, 16, TerrainId.Sand);
-            SetFloor(map, x, 22, TerrainId.Sand);
-        }
-        for (int y = 16; y <= 22; y++)
-        {
-            SetFloor(map, 5, y, TerrainId.Sand);
-            SetFloor(map, 11, y, TerrainId.Sand);
-        }
-
-        // === COTTAGE (top-left, zone 1 with thatch roof) ===
-        ushort cottageZone = 1;
-        var cottageBounds = new Rectangle(4, 4, 9, 7);
-        map.RegisterZone(new ZoneDefinition
-        {
-            Id = cottageZone,
-            HasRoof = true,
-            RoofMaterial = RoofMaterialType.WoodShingle,
-            Bounds = cottageBounds
-        });
-
-        // Cottage walls
-        for (int x = 3; x <= 12; x++)
-        {
-            SetWall(map, x, 3, TerrainId.Wood, WallType.WoodWall);
-            SetWall(map, x, 10, TerrainId.Wood, WallType.WoodWall);
-        }
-        for (int y = 3; y <= 10; y++)
-        {
-            SetWall(map, 3, y, TerrainId.Wood, WallType.WoodWall);
-            SetWall(map, 12, y, TerrainId.Wood, WallType.WoodWall);
-        }
-        // Interior: wood floor
-        for (int x = 4; x <= 11; x++)
-            for (int y = 4; y <= 9; y++)
-            {
-                SetFloor(map, x, y, TerrainId.Wood, cottageZone);
-            }
-        // Door (south wall gap)
-        SetFloor(map, 8, 10, TerrainId.Wood, cottageZone);
-        // Path from door to main path
-        for (int y = 11; y <= 17; y++)
-            SetFloor(map, 8, y, TerrainId.Dirt);
-
-        // === CAVE (top-right) — organic shape using distance from center ===
-        ushort caveZone = 3;
-        int caveCX = 40, caveCY = 9; // cave center
-        int caveRadius = 7;
-        int caveBoundsX1 = caveCX - caveRadius - 1;
-        int caveBoundsY1 = caveCY - caveRadius - 1;
-        int caveBoundsW = caveRadius * 2 + 3;
-        int caveBoundsH = caveRadius * 2 + 3;
-
-        map.RegisterZone(new ZoneDefinition
-        {
-            Id = caveZone,
-            HasRoof = true,
-            RoofMaterial = RoofMaterialType.CaveStone,
-            Bounds = new Rectangle(caveBoundsX1, caveBoundsY1, caveBoundsW, caveBoundsH)
-        });
-
-        // First fill the area with cave walls
-        for (int x = caveBoundsX1; x < caveBoundsX1 + caveBoundsW; x++)
-            for (int y = caveBoundsY1; y < caveBoundsY1 + caveBoundsH; y++)
-                if (map.IsInBounds(x, y))
-                    SetWall(map, x, y, TerrainId.CaveFloor, WallType.CaveWall);
-
-        // Carve organic cave shape using noise-perturbed distance
-        for (int x = caveBoundsX1; x < caveBoundsX1 + caveBoundsW; x++)
-        {
-            for (int y = caveBoundsY1; y < caveBoundsY1 + caveBoundsH; y++)
-            {
-                if (!map.IsInBounds(x, y)) continue;
-                float dx = x - caveCX;
-                float dy = y - caveCY;
-                float dist = MathF.Sqrt(dx * dx + dy * dy);
-
-                // Noise-perturbed radius for organic shape
-                int h = TileMap.ComputeVariantSeed(x, y);
-                float noise = ((h & 0xFF) / 255f - 0.5f) * 3f; // ±1.5 tile wobble
-                float effectiveRadius = caveRadius + noise;
-
-                if (dist < effectiveRadius)
-                    SetFloor(map, x, y, TerrainId.CaveFloor, caveZone);
-            }
-        }
-
-        // Cave entrance — winding tunnel to the west
-        for (int x = 27; x <= caveCX - caveRadius + 2; x++)
-        {
-            int tunnelY = 5 + (int)(MathF.Sin(x * 0.5f) * 1.2f);
-            SetFloor(map, x, tunnelY, TerrainId.CaveFloor, caveZone);
-            SetFloor(map, x, tunnelY + 1, TerrainId.CaveFloor, caveZone);
-            // Cave walls around tunnel
-            if (map.IsInBounds(x, tunnelY - 1) && !map.GetTile(x, tunnelY - 1).HasWall)
-                SetWall(map, x, tunnelY - 1, TerrainId.CaveFloor, WallType.CaveWall);
-            if (map.IsInBounds(x, tunnelY + 2) && !map.GetTile(x, tunnelY + 2).HasWall)
-                SetWall(map, x, tunnelY + 2, TerrainId.CaveFloor, WallType.CaveWall);
-        }
-        // Connect entrance to dirt path
-        for (int x = 25; x <= 27; x++)
-            SetFloor(map, x, 5, TerrainId.Dirt);
-
-        // Lava pool in deep cave (southeast area)
-        for (int x = 42; x <= 44; x++)
-            for (int y = 10; y <= 12; y++)
-                if (!map.GetTile(x, y).HasWall)
-                    SetFloor(map, x, y, TerrainId.Lava, caveZone);
-
-        // === TAVERN (bottom-right, zone 2 with stone tile roof) ===
-        ushort tavernZone = 2;
-        var tavernBounds = new Rectangle(27, 27, 10, 8);
-        map.RegisterZone(new ZoneDefinition
-        {
-            Id = tavernZone,
-            HasRoof = true,
-            RoofMaterial = RoofMaterialType.WoodShingle,
-            Bounds = tavernBounds
-        });
-
-        // Tavern walls (brick)
-        for (int x = 26; x <= 36; x++)
-        {
-            SetWall(map, x, 26, TerrainId.Stone, WallType.BrickWall);
-            SetWall(map, x, 34, TerrainId.Stone, WallType.BrickWall);
-        }
-        for (int y = 26; y <= 34; y++)
-        {
-            SetWall(map, 26, y, TerrainId.Stone, WallType.BrickWall);
-            SetWall(map, 36, y, TerrainId.Stone, WallType.BrickWall);
-        }
-        // Interior: stone floor
-        for (int x = 27; x <= 35; x++)
-            for (int y = 27; y <= 33; y++)
-                SetFloor(map, x, y, TerrainId.Stone, tavernZone);
-        // Door (north wall)
-        SetFloor(map, 30, 26, TerrainId.Stone, tavernZone);
-        // Path from tavern to main path
-        for (int y = 19; y <= 25; y++)
-            SetFloor(map, 30, y, TerrainId.Dirt);
-
-        // === ICE AREA (bottom-left) ===
-        for (int x = 2; x <= 10; x++)
-            for (int y = 30; y <= 37; y++)
-                SetFloor(map, x, y, TerrainId.Ice);
-        // Snow around ice
-        for (int x = 1; x <= 11; x++)
-        {
-            SetFloor(map, x, 29, TerrainId.Grass);
-            SetFloor(map, x, 38, TerrainId.Grass);
-        }
-
-        // Compute water depth from distance to shore
         map.ComputeWaterDepth();
-
         return map;
     }
 
-    private static void SetFloor(TileMap map, int x, int y, TerrainId terrain, ushort zoneId = 0)
+    /// <summary>
+    /// Builds a rectangular house with walls, floor, zone, and a door.
+    /// doorSide: 0=north, 1=east, 2=south, 3=west. doorOffset: tiles from left/top of that wall.
+    /// </summary>
+    private static void BuildHouse(TileMap map, int x, int y, int w, int h,
+        ushort zoneId, TerrainId floorTerrain, WallType wallType, RoofMaterialType roofMaterial,
+        int doorSide, int doorOffset)
     {
-        if (!map.IsInBounds(x, y)) return;
-        map.SetTile(x, y, new TileData(terrain, WallType.None,
-            TileMap.ComputeVariantSeed(x, y), zoneId));
-    }
+        var bounds = new Rectangle(x, y, w, h);
+        map.RegisterZone(new ZoneDefinition
+        {
+            Id = zoneId, HasRoof = true,
+            RoofMaterial = roofMaterial, Bounds = bounds
+        });
 
-    private static void SetWall(TileMap map, int x, int y, TerrainId terrain, WallType wall)
-    {
-        if (!map.IsInBounds(x, y)) return;
-        map.SetTile(x, y, new TileData(terrain, wall,
-            TileMap.ComputeVariantSeed(x, y)));
+        // Walls around the zone (1 tile outside bounds)
+        for (int wx = x - 1; wx <= x + w; wx++)
+        {
+            SetWall(map, wx, y - 1, floorTerrain, wallType);
+            SetWall(map, wx, y + h, floorTerrain, wallType);
+        }
+        for (int wy = y - 1; wy <= y + h; wy++)
+        {
+            SetWall(map, x - 1, wy, floorTerrain, wallType);
+            SetWall(map, x + w, wy, floorTerrain, wallType);
+        }
+
+        // Floor
+        for (int fx = x; fx < x + w; fx++)
+            for (int fy = y; fy < y + h; fy++)
+                SetFloor(map, fx, fy, floorTerrain, zoneId);
+
+        // Door
+        int doorX, doorY;
+        switch (doorSide)
+        {
+            case 0: doorX = x + doorOffset; doorY = y - 1; break;     // north
+            case 1: doorX = x + w; doorY = y + doorOffset; break;      // east
+            case 2: doorX = x + doorOffset; doorY = y + h; break;      // south
+            case 3: doorX = x - 1; doorY = y + doorOffset; break;      // west
+            default: return;
+        }
+        SetFloor(map, doorX, doorY, floorTerrain, zoneId);
+
+        // Windows on south wall (skip door tile and corners)
+        int southWallY = y + h;
+        for (int wx = x; wx < x + w; wx++)
+        {
+            if (wx == doorX && southWallY == doorY) continue; // skip door
+            // Place windows every 2-3 tiles
+            if ((wx - x) % 3 == 1 && wx > x && wx < x + w - 1)
+                SetWindow(map, wx, southWallY);
+        }
     }
 
     protected override void Update(GameTime gameTime)
@@ -413,5 +511,26 @@ public class RL : Game
     {
         _renderPipeline.Draw(gameTime, _tileMap, _ecsWorld);
         base.Draw(gameTime);
+    }
+
+    private static void SetFloor(TileMap map, int x, int y, TerrainId terrain, ushort zoneId = 0)
+    {
+        if (!map.IsInBounds(x, y)) return;
+        map.SetTile(x, y, new TileData(terrain, WallType.None,
+            TileMap.ComputeVariantSeed(x, y), zoneId));
+    }
+
+    private static void SetWall(TileMap map, int x, int y, TerrainId terrain, WallType wall)
+    {
+        if (!map.IsInBounds(x, y)) return;
+        map.SetTile(x, y, new TileData(terrain, wall, TileMap.ComputeVariantSeed(x, y)));
+    }
+
+    private static void SetWindow(TileMap map, int x, int y)
+    {
+        if (!map.IsInBounds(x, y)) return;
+        var tile = map.GetTile(x, y);
+        tile.HasWindow = true;
+        map.SetTile(x, y, tile);
     }
 }

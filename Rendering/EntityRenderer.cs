@@ -155,8 +155,12 @@ public class EntityRenderer
             }
             else
             {
+                // Vector-rasterized sprites — draw at their size, centered and bottom-anchored
+                int drawW = (int)(tileSize * size);
+                int drawH = (int)(tileSize * size);
                 var screenPos = camera.WorldToScreen(new Vector2(worldPixelX, worldPixelY + yOffset));
-                destRect = new Rectangle((int)screenPos.X, (int)screenPos.Y, tileSize, tileSize);
+                int xOff = (tileSize - drawW) / 2;
+                destRect = new Rectangle((int)screenPos.X + xOff, (int)screenPos.Y + tileSize - drawH, drawW, drawH);
             }
 
             spriteBatch.Draw(texture, destRect, Color.White);

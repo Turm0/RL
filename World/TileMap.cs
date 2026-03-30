@@ -62,7 +62,7 @@ public class TileMap
     public bool BlocksLight(int x, int y)
     {
         if (!IsInBounds(x, y)) return true;
-        if (_tiles[x, y].HasWall) return true;
+        if (_tiles[x, y].HasWall && !_tiles[x, y].HasWindow) return true;
         if (_objectBlocksLight[x, y]) return true;
         return false;
     }
