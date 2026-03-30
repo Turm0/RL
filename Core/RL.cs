@@ -271,11 +271,11 @@ public class RL : Game
             if (map.IsInBounds(tunnelX + 2, y) && map.GetTile(tunnelX + 2, y).HasWall)
                 SetWall(map, tunnelX + 2, y, TerrainId.CaveFloor, WallType.CaveWall);
         }
-        // Transition from cave to outdoors
-        for (int x = 27; x <= 30; x++)
-            for (int y = 27; y <= 30; y++)
-                if (map.GetTile(x, y).HasWall)
-                    SetFloor(map, x, y, TerrainId.Dirt);
+        // Cave entrance — carve a clear opening through the mountain face
+        // Force-clear walls at the tunnel exit point regardless of what's there
+        for (int y = 24; y <= 32; y++)
+            for (int x = 27; x <= 30; x++)
+                SetFloor(map, x, y, TerrainId.Dirt);
 
         // === RIVER (runs north-south through village, slight curve) ===
         for (int y = 0; y < H; y++)
