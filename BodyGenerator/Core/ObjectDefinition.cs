@@ -34,4 +34,8 @@ public class ShapeDef
     public int FromX, FromY, ToX, ToY;
     public int LineWidth = 1;
     public List<Point> Points; // for polygon
+    // For 'pixels' shape type
+    public int OffsetX, OffsetY;
+    public Dictionary<char, string> MaterialMap; // char → material name
+    public string[] Grid; // rows of characters
 }

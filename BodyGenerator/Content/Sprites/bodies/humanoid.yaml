@@ -50,6 +50,7 @@ parts:
       shoulder_right: [7, 1]
       hip_left: [2, 6]
       hip_right: [5, 6]
+      chest: [4, 3]
     pixels: |
       ..hhhh..
       .hshhsh.
@@ -63,7 +64,9 @@ parts:
     width: 6
     height: 7
     anchor: [3, 6]
-    joints: {}
+    joints:
+      hair_top: [3, 0]
+      beard: [3, 6]
     pixels: |
       .ssss.
       shhHhs
@@ -173,7 +176,8 @@ parts:
     width: 2
     height: 2
     anchor: [1, 0]
-    joints: {}
+    joints:
+      grip_left: [0, 1]
     pixels: |
       hh
       hs
@@ -182,7 +186,8 @@ parts:
     width: 2
     height: 2
     anchor: [0, 0]
-    joints: {}
+    joints:
+      grip_right: [1, 1]
     pixels: |
       hh
       sh

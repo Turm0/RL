@@ -1,0 +1,24 @@
+name: Short Hair
+sprite_size: 6
+anchor: [3, 3]
+
+materials:
+  hair_base:
+    color: "#553311"
+  hair_shadow:
+    color: "#331100"
+  hair_highlight:
+    color: "#775533"
+
+shapes:
+  - type: pixels
+    offset: [0, 0]
+    material_map:
+      h: hair_base
+      s: hair_shadow
+      H: hair_highlight
+    grid: |
+      .Hhh.
+      Hhhhs
+      hhhsh
+      .ss..

@@ -76,9 +76,27 @@ public class RL : Game
         player.Set(new RenderLayer(RenderLayer.CreatureLayer));
         player.Set(new LightEmitter(10f, 1.0f, new Vector3(1.2f, 1.1f, 0.9f), true, 0.15f));
         player.Set(new MovementAnimation(12f, MoveAnimType.Slide));
+        var playerApp = new Appearance(
+            new Color(232, 184, 120), new Color(200, 148, 88), new Color(244, 212, 160),
+            new Color(34, 68, 170));
+        playerApp.Attachments.Add(new AttachmentSlot("features/hair_long.yaml", "hair_top", 15,
+            materialOverrides: new System.Collections.Generic.Dictionary<string, Color>
+            {
+                ["hair_base"] = new Color(100, 50, 20),
+                ["hair_shadow"] = new Color(60, 30, 10),
+                ["hair_highlight"] = new Color(140, 80, 40),
+            }));
+        player.Set(playerApp);
 
         // --- Village NPCs ---
-        SpawnCreature(38, 33, "creatures/human_mage.yaml");
+        var mage = SpawnCreature(38, 33, "creatures/human_mage.yaml");
+        var mageApp = new Appearance(
+            new Color(200, 160, 100), new Color(160, 120, 70), new Color(230, 190, 140),
+            new Color(0, 0, 0));
+        mageApp.Attachments.Add(new AttachmentSlot("features/hair_short.yaml", "hair_top", 15));
+        mageApp.Attachments.Add(new AttachmentSlot("features/beard_short.yaml", "beard", 14));
+        mage.Set(mageApp);
+
         SpawnCreature(43, 36, "creatures/human_cleric.yaml");
         SpawnCreature(35, 38, "creatures/human_thief.yaml");
 

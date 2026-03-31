@@ -1,0 +1,21 @@
+name: Short Beard
+sprite_size: 4
+anchor: [2, 0]
+
+materials:
+  hair_base:
+    color: "#553311"
+  hair_shadow:
+    color: "#331100"
+
+shapes:
+  - type: pixels
+    offset: [0, 0]
+    material_map:
+      h: hair_base
+      s: hair_shadow
+    grid: |
+      h..h
+      .hh.
+      .sh.
+      ..s.

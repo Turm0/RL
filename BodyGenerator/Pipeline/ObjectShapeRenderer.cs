@@ -7,30 +7,52 @@ namespace BodyGenerator.Pipeline;
 
 public static class ObjectShapeRenderer
 {
-    public static void RenderShape(PixelBuffer buffer, ShapeDef shape, MaterialDef material, int zOrder)
+    public static void RenderShape(PixelBuffer buffer, ShapeDef shape, MaterialDef material,
+        Dictionary<string, MaterialDef> allMaterials, int zOrder, int globalOffsetX = 0, int globalOffsetY = 0)
     {
-        var color = new Color(material.Color.R, material.Color.G, material.Color.B, material.Alpha);
+        int ox = globalOffsetX, oy = globalOffsetY;
 
         switch (shape.Type)
         {
             case "rect":
-                RenderRect(buffer, shape.X, shape.Y, shape.Width, shape.Height, color, shape.Filled, zOrder);
+                var rc = MatColor(material);
+                RenderRect(buffer, shape.X + ox, shape.Y + oy, shape.Width, shape.Height, rc, shape.Filled, zOrder);
                 break;
             case "oval":
-                RenderOval(buffer, shape.CenterX, shape.CenterY, shape.RadiusX, shape.RadiusY, color, shape.Filled, zOrder);
+                var oc = MatColor(material);
+                RenderOval(buffer, shape.CenterX + ox, shape.CenterY + oy, shape.RadiusX, shape.RadiusY, oc, shape.Filled, zOrder);
                 break;
             case "line":
-                RenderLine(buffer, shape.FromX, shape.FromY, shape.ToX, shape.ToY, shape.LineWidth, color, zOrder);
+                var lc = MatColor(material);
+                RenderLine(buffer, shape.FromX + ox, shape.FromY + oy, shape.ToX + ox, shape.ToY + oy, shape.LineWidth, lc, zOrder);
                 break;
             case "flame":
-                RenderFlame(buffer, shape.CenterX, shape.CenterY, shape.Width, shape.Height, color, zOrder);
+                var fc = MatColor(material);
+                RenderFlame(buffer, shape.CenterX + ox, shape.CenterY + oy, shape.Width, shape.Height, fc, zOrder);
                 break;
             case "polygon":
                 if (shape.Points != null && shape.Points.Count >= 3)
-                    RenderPolygon(buffer, shape.Points, color, zOrder);
+                {
+                    var pc = MatColor(material);
+                    if (ox != 0 || oy != 0)
+                    {
+                        var offset = new List<Point>();
+                        foreach (var p in shape.Points) offset.Add(new Point(p.X + ox, p.Y + oy));
+                        RenderPolygon(buffer, offset, pc, zOrder);
+                    }
+                    else
+                        RenderPolygon(buffer, shape.Points, pc, zOrder);
+                }
+                break;
+            case "pixels":
+                if (shape.Grid != null && shape.MaterialMap != null && allMaterials != null)
+                    RenderPixels(buffer, shape, allMaterials, zOrder, ox, oy);
                 break;
         }
     }
+
+    private static Color MatColor(MaterialDef mat)
+        => mat != null ? new Color(mat.Color.R, mat.Color.G, mat.Color.B, mat.Alpha) : Color.Transparent;
 
     private static void RenderRect(PixelBuffer buffer, int x, int y, int w, int h,
         Color color, bool filled, int z)
@@ -163,6 +185,28 @@ public static class ObjectShapeRenderer
             int rowHalfW = (int)(halfW * widthT);
             for (int px = cx - rowHalfW; px <= cx + rowHalfW; px++)
                 buffer.SetPixel(px, py, color, z);
+        }
+    }
+
+    private static void RenderPixels(PixelBuffer buffer, ShapeDef shape,
+        Dictionary<string, MaterialDef> materials, int z, int ox, int oy)
+    {
+        int startX = shape.OffsetX + ox;
+        int startY = shape.OffsetY + oy;
+
+        for (int row = 0; row < shape.Grid.Length; row++)
+        {
+            string line = shape.Grid[row];
+            for (int col = 0; col < line.Length; col++)
+            {
+                char ch = line[col];
+                if (ch == '.') continue;
+                if (!shape.MaterialMap.TryGetValue(ch, out string matName)) continue;
+                if (!materials.TryGetValue(matName, out MaterialDef mat)) continue;
+
+                var color = new Color(mat.Color.R, mat.Color.G, mat.Color.B, mat.Alpha);
+                buffer.SetPixel(startX + col, startY + row, color, z);
+            }
         }
     }
 

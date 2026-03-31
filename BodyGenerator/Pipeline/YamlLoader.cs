@@ -84,14 +84,47 @@ public static class YamlLoader
             Palette = new Dictionary<ColorRole, Color>()
         };
 
-        var paletteNode = (YamlMappingNode)root["palette"];
-        foreach (var kvp in paletteNode.Children)
+        if (root.Children.ContainsKey("palette"))
         {
-            string roleName = ((YamlScalarNode)kvp.Key).Value;
-            string hexColor = ((YamlScalarNode)kvp.Value).Value;
-            var role = ParseColorRoleName(roleName);
-            var color = ParseHexColor(hexColor);
-            creature.Palette[role] = color;
+            var paletteNode = (YamlMappingNode)root["palette"];
+            foreach (var kvp in paletteNode.Children)
+            {
+                string roleName = ((YamlScalarNode)kvp.Key).Value;
+                string hexColor = ((YamlScalarNode)kvp.Value).Value;
+                var role = ParseColorRoleName(roleName);
+                var color = ParseHexColor(hexColor);
+                creature.Palette[role] = color;
+            }
+        }
+
+        // Parse appearance attachments
+        if (root.Children.ContainsKey("attachments"))
+        {
+            creature.Attachments = new List<CreatureAttachment>();
+            var attachNode = (YamlSequenceNode)root["attachments"];
+            foreach (YamlMappingNode attNode in attachNode)
+            {
+                var att = new CreatureAttachment
+                {
+                    ObjectPath = GetString(attNode, "object"),
+                    Joint = attNode.Children.ContainsKey("joint")
+                        ? GetString(attNode, "joint") : null,
+                    ZOrder = attNode.Children.ContainsKey("z_order")
+                        ? GetInt(attNode, "z_order") : 15
+                };
+                if (attNode.Children.ContainsKey("material_overrides"))
+                {
+                    att.MaterialOverrides = new Dictionary<string, Color>();
+                    var moNode = (YamlMappingNode)attNode["material_overrides"];
+                    foreach (var kv in moNode.Children)
+                    {
+                        string matName = ((YamlScalarNode)kv.Key).Value;
+                        string hex = ((YamlScalarNode)kv.Value).Value;
+                        att.MaterialOverrides[matName] = ParseHexColor(hex);
+                    }
+                }
+                creature.Attachments.Add(att);
+            }
         }
 
         return creature;

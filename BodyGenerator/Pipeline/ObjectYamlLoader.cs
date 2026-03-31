@@ -128,6 +128,25 @@ public static class ObjectYamlLoader
                     foreach (YamlSequenceNode pt in pointsNode)
                         shape.Points.Add(ParsePoint(pt));
                     break;
+
+                case "pixels":
+                    if (shapeNode.Children.ContainsKey("offset"))
+                    {
+                        var off = ParsePoint((YamlSequenceNode)shapeNode["offset"]);
+                        shape.OffsetX = off.X;
+                        shape.OffsetY = off.Y;
+                    }
+                    shape.MaterialMap = new Dictionary<char, string>();
+                    var mapNode = (YamlMappingNode)shapeNode["material_map"];
+                    foreach (var kv in mapNode.Children)
+                    {
+                        char ch = ((YamlScalarNode)kv.Key).Value[0];
+                        string matName = ((YamlScalarNode)kv.Value).Value;
+                        shape.MaterialMap[ch] = matName;
+                    }
+                    string gridText = ((YamlScalarNode)shapeNode["grid"]).Value;
+                    shape.Grid = gridText.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                    break;
             }
 
             shapes.Add(shape);

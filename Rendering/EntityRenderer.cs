@@ -117,16 +117,66 @@ public class EntityRenderer
             }
             else
             {
-                texture = _cache.GetOrCreate(cacheKey, () =>
-                {
-                    if (isTerrainObj)
-                        return _objectGenerator.Generate(spriteBatch.GraphicsDevice, objType,
-                            (int)(tileX * 374761393 + tileY * 668265263));
+                // Check for appearance/equipment components for per-entity sprites
+                bool hasAppearance = entity.Has<Appearance>();
+                bool hasEquipment = entity.Has<Equipment>();
 
-                    if (creatureType.EndsWith(".yaml"))
-                        return _spriteGenerator.Generate(spriteBatch.GraphicsDevice, creatureType);
-                    return _rasterizer.RasterizeCreature(creatureType, size, tileSize, spriteBatch.GraphicsDevice);
-                });
+                if ((hasAppearance || hasEquipment) && creatureType.EndsWith(".yaml"))
+                {
+                    // Build unique cache key including appearance
+                    string appearanceKey = cacheKey;
+                    if (hasAppearance) appearanceKey += "_" + entity.Get<Appearance>().GetAppearanceHash();
+                    if (hasEquipment) appearanceKey += "_" + entity.Get<Equipment>().GetEquipmentHash();
+
+                    texture = _cache.GetOrCreate(appearanceKey, () =>
+                    {
+                        var attachments = new System.Collections.Generic.List<BodyGenerator.Pipeline.AttachmentData>();
+                        Dictionary<BodyGenerator.Core.ColorRole, Color> paletteOverrides = null;
+
+                        if (hasAppearance)
+                        {
+                            var app = entity.Get<Appearance>();
+                            paletteOverrides = new Dictionary<BodyGenerator.Core.ColorRole, Color>
+                            {
+                                [BodyGenerator.Core.ColorRole.SkinBase] = app.SkinBase,
+                                [BodyGenerator.Core.ColorRole.SkinShadow] = app.SkinShadow,
+                                [BodyGenerator.Core.ColorRole.SkinHighlight] = app.SkinHighlight,
+                                [BodyGenerator.Core.ColorRole.Eye] = app.EyeColor,
+                                [BodyGenerator.Core.ColorRole.Outline] = app.OutlineColor,
+                            };
+                            if (app.Attachments != null)
+                                foreach (var a in app.Attachments)
+                                    attachments.Add(ToAttachmentData(a));
+                        }
+                        if (hasEquipment)
+                        {
+                            var eq = entity.Get<Equipment>();
+                            if (eq.Slots != null)
+                                foreach (var s in eq.Slots)
+                                    attachments.Add(ToAttachmentData(s));
+                        }
+
+                        return _spriteGenerator.GenerateWithAttachments(
+                            spriteBatch.GraphicsDevice,
+                            BodyGenerator.Pipeline.YamlLoader.LoadCreature(
+                                System.IO.Path.Combine(System.AppContext.BaseDirectory, "Content", "Sprites", creatureType)),
+                            paletteOverrides,
+                            attachments.Count > 0 ? attachments : null);
+                    });
+                }
+                else
+                {
+                    texture = _cache.GetOrCreate(cacheKey, () =>
+                    {
+                        if (isTerrainObj)
+                            return _objectGenerator.Generate(spriteBatch.GraphicsDevice, objType,
+                                (int)(tileX * 374761393 + tileY * 668265263));
+
+                        if (creatureType.EndsWith(".yaml"))
+                            return _spriteGenerator.Generate(spriteBatch.GraphicsDevice, creatureType);
+                        return _rasterizer.RasterizeCreature(creatureType, size, tileSize, spriteBatch.GraphicsDevice);
+                    });
+                }
             }
 
             // Compute world position with movement animation offset
@@ -202,5 +252,18 @@ public class EntityRenderer
 
             spriteBatch.Draw(texture, destRect, Color.White);
         }
+    }
+
+    private static BodyGenerator.Pipeline.AttachmentData ToAttachmentData(AttachmentSlot slot)
+    {
+        return new BodyGenerator.Pipeline.AttachmentData
+        {
+            ObjectPath = slot.ObjectPath,
+            Joint = slot.Joint,
+            OffsetX = slot.Offset.X,
+            OffsetY = slot.Offset.Y,
+            ZOrder = slot.ZOrder,
+            MaterialOverrides = slot.MaterialOverrides
+        };
     }
 }

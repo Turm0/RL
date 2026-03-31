@@ -46,10 +46,10 @@ public class ObjectSpriteGenerator
         for (int i = 0; i < shapes.Count; i++)
         {
             var shape = shapes[i];
-            if (shape.Material != null && def.Materials.TryGetValue(shape.Material, out var material))
-            {
-                ObjectShapeRenderer.RenderShape(buffer, shape, material, i);
-            }
+            MaterialDef material = null;
+            if (shape.Material != null)
+                def.Materials.TryGetValue(shape.Material, out material);
+            ObjectShapeRenderer.RenderShape(buffer, shape, material, def.Materials, i);
         }
 
         // Apply outline
