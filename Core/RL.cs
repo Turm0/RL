@@ -39,6 +39,11 @@ public class RL : Game
     {
         base.Initialize();
 
+        // Initialize content registry — auto-discover all YAML content
+        var registry = new ContentRegistry();
+        string spritesRoot = System.IO.Path.Combine(AppContext.BaseDirectory, "Content", "Sprites");
+        registry.ScanDirectory(spritesRoot);
+
         _tileMap = CreateDemoLevel();
         _tileMap.PopulateElevation();
         _ecsWorld = new DefaultEcs.World();

@@ -1,3 +1,4 @@
+id: torch
 name: Torch
 sprite_size: 32
 anchor: [16, 28]
