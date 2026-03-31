@@ -1,4 +1,4 @@
-id: human_thief
+id: creature.human_thief
 name: Human Thief
 body_template: humanoid
 pose: idle

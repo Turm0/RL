@@ -18,6 +18,7 @@ public class RL : Game
     private PlayerInputSystem _playerInputSystem;
     private WorldClock _worldClock;
     private WeatherSystem _weatherSystem;
+    private CreatureFactory _creatureFactory;
     private KeyboardState _prevKeyboard;
     private int _lastFovX = int.MinValue;
     private int _lastFovY = int.MinValue;
@@ -51,6 +52,8 @@ public class RL : Game
         var font = Content.Load<Microsoft.Xna.Framework.Graphics.SpriteFont>("DefaultFont");
         var postProcessFx = Content.Load<Microsoft.Xna.Framework.Graphics.Effect>("Effects/PostProcess");
 
+        _creatureFactory = new CreatureFactory(registry);
+
         _renderPipeline = new RenderPipeline();
         _renderPipeline.Initialize(GraphicsDevice, Window, _tileMap, font, postProcessFx);
 
@@ -73,52 +76,31 @@ public class RL : Game
 
     private void SpawnEntities()
     {
-        // Player in the village square
-        var player = _ecsWorld.CreateEntity();
-        player.Set(new Position(40, 35));
-        player.Set(new SpriteShape("creatures/human_ranger.yaml", 1.0f));
+        // Player — spawned via factory then enhanced with player-specific components
+        var player = _creatureFactory.Spawn(_ecsWorld, 40, 35, "species.human", "occupation.ranger");
         player.Set(new PlayerControlled());
-        player.Set(new RenderLayer(RenderLayer.CreatureLayer));
         player.Set(new LightEmitter(10f, 1.0f, new Vector3(1.2f, 1.1f, 0.9f), true, 0.15f));
         player.Set(new MovementAnimation(12f, MoveAnimType.Slide));
-        var playerApp = new Appearance(
-            new Color(232, 184, 120), new Color(200, 148, 88), new Color(244, 212, 160),
-            new Color(34, 68, 170));
-        playerApp.Attachments.Add(new AttachmentSlot("features/hair_long.yaml", "hair_top", 15,
-            materialOverrides: new System.Collections.Generic.Dictionary<string, Color>
-            {
-                ["hair_base"] = new Color(100, 50, 20),
-                ["hair_shadow"] = new Color(60, 30, 10),
-                ["hair_highlight"] = new Color(140, 80, 40),
-            }));
-        player.Set(playerApp);
 
-        // --- Village NPCs ---
-        var mage = SpawnCreature(38, 33, "creatures/human_mage.yaml");
-        var mageApp = new Appearance(
-            new Color(200, 160, 100), new Color(160, 120, 70), new Color(230, 190, 140),
-            new Color(0, 0, 0));
-        mageApp.Attachments.Add(new AttachmentSlot("features/hair_short.yaml", "hair_top", 15));
-        mageApp.Attachments.Add(new AttachmentSlot("features/beard_short.yaml", "beard", 14));
-        mage.Set(mageApp);
-
-        SpawnCreature(43, 36, "creatures/human_cleric.yaml");
-        SpawnCreature(35, 38, "creatures/human_thief.yaml");
+        // --- Village NPCs (random humans) ---
+        _creatureFactory.Spawn(_ecsWorld, 38, 33, "species.human", "occupation.mage");
+        _creatureFactory.Spawn(_ecsWorld, 43, 36, "species.human", "occupation.guard");
+        _creatureFactory.Spawn(_ecsWorld, 35, 38, "species.human", "occupation.ranger");
 
         // --- House interiors ---
-        SpawnCreature(33, 27, "creatures/human_knight.yaml");   // House 1
-        SpawnCreature(51, 26, "creatures/dwarf_smith.yaml");     // Smithy
-        SpawnCreature(48, 44, "creatures/human_mage.yaml");      // House 3
+        _creatureFactory.Spawn(_ecsWorld, 33, 27, "species.human", "occupation.guard");
+        _creatureFactory.Spawn(_ecsWorld, 51, 26, "species.human", "occupation.guard");
+        _creatureFactory.Spawn(_ecsWorld, 48, 44, "species.human", "occupation.mage");
 
         // --- Tavern ---
-        SpawnCreature(35, 48, "creatures/human_thief.yaml");
-        SpawnCreature(39, 50, "creatures/human_cleric.yaml");
+        _creatureFactory.Spawn(_ecsWorld, 35, 48, "species.human", "occupation.ranger");
+        _creatureFactory.Spawn(_ecsWorld, 39, 50, "species.human", "occupation.guard");
 
         // --- Mountain caves ---
-        SpawnCreature(25, 12, "creatures/undead.yaml");
-        SpawnCreature(30, 8, "creatures/undead.yaml");
-        SpawnCreature(18, 18, "creatures/dark_elf.yaml");
-        SpawnCreature(35, 15, "creatures/orc_warrior.yaml");
+        _creatureFactory.Spawn(_ecsWorld, 25, 12, "species.orc", "occupation.guard");
+        _creatureFactory.Spawn(_ecsWorld, 30, 8, "species.orc", "occupation.ranger");
+        _creatureFactory.Spawn(_ecsWorld, 18, 18, "species.elf", "occupation.mage");
+        _creatureFactory.Spawn(_ecsWorld, 35, 15, "species.orc", "occupation.guard");
 
         // === Torches ===
         // Village
@@ -166,7 +148,7 @@ public class RL : Game
     {
         var entity = _ecsWorld.CreateEntity();
         entity.Set(new Position(x, y));
-        entity.Set(new SpriteShape("objects/torch.yaml", 1.0f));
+        entity.Set(new SpriteShape("objects/torch.yaml", 1.0f)); // TODO: use registry key
         entity.Set(new RenderLayer(RenderLayer.TerrainObjectLayer));
         entity.Set(new LightEmitter(8f, 1.1f, new Vector3(1.3f, 1.0f, 0.65f), true, 0.3f));
     }

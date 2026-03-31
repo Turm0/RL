@@ -1,4 +1,4 @@
-id: hair_long
+id: feature.hair_long
 name: Long Hair
 sprite_size: 8
 anchor: [3, 5]

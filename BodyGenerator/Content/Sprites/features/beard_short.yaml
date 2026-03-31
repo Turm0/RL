@@ -1,4 +1,4 @@
-id: beard_short
+id: feature.beard_short
 name: Short Beard
 sprite_size: 4
 anchor: [2, 0]

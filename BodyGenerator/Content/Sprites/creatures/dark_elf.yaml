@@ -1,4 +1,4 @@
-id: dark_elf
+id: creature.dark_elf
 name: Dark Elf
 body_template: humanoid
 pose: idle

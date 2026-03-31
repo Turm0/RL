@@ -1,4 +1,4 @@
-id: human_mage
+id: creature.human_mage
 name: Human Mage
 body_template: humanoid
 pose: idle

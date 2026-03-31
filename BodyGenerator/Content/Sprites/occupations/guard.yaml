@@ -1,0 +1,9 @@
+id: occupation.guard
+type: occupation
+name: Guard
+
+equipment:
+  main_hand:
+    pool:
+      - { id: object.torch, weight: 5 }
+      - { id: null, weight: 5 }

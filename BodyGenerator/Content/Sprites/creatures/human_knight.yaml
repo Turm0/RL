@@ -1,4 +1,4 @@
-id: human_knight
+id: creature.human_knight
 name: Human Knight
 body_template: humanoid
 pose: idle

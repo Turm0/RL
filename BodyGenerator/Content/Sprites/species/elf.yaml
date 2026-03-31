@@ -1,0 +1,40 @@
+id: species.elf
+type: species
+name: Elf
+body_template: humanoid
+
+appearance:
+  skin:
+    pool:
+      - { weight: 4, base: "#F0D8B8", shadow: "#D0B898", highlight: "#FFF0D8" }
+      - { weight: 3, base: "#E8D0A8", shadow: "#C8B088", highlight: "#F8E8C8" }
+      - { weight: 2, base: "#7A6A9A", shadow: "#5A4A7A", highlight: "#9A8ABA" }
+
+  eyes:
+    pool:
+      - { color: "#44AACC", weight: 3 }
+      - { color: "#88CC44", weight: 3 }
+      - { color: "#AA88FF", weight: 2 }
+      - { color: "#FFD700", weight: 1 }
+
+  outline: "#0A0A1A"
+
+  features:
+    hair:
+      joint: hair_top
+      z_order: 15
+      pool:
+        - { id: feature.hair_long, weight: 8 }
+        - { id: feature.hair_short, weight: 2 }
+    beard:
+      joint: beard
+      z_order: 14
+      pool:
+        - { id: null, weight: 10 }
+
+  hair_colors:
+    pool:
+      - { weight: 3, hair_base: "#E8D8A0", hair_shadow: "#C8B880", hair_highlight: "#FFF0C0" }
+      - { weight: 3, hair_base: "#CCCCDD", hair_shadow: "#9999AA", hair_highlight: "#EEEEFF" }
+      - { weight: 2, hair_base: "#442200", hair_shadow: "#221100", hair_highlight: "#664422" }
+      - { weight: 1, hair_base: "#111111", hair_shadow: "#000000", hair_highlight: "#333333" }

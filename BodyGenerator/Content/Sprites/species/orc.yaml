@@ -1,0 +1,37 @@
+id: species.orc
+type: species
+name: Orc
+body_template: humanoid
+
+appearance:
+  skin:
+    pool:
+      - { weight: 5, base: "#5A8A3A", shadow: "#3A6A1A", highlight: "#7AAA5A" }
+      - { weight: 3, base: "#4A7A2A", shadow: "#2A5A0A", highlight: "#6A9A4A" }
+      - { weight: 2, base: "#6A8A4A", shadow: "#4A6A2A", highlight: "#8AAA6A" }
+
+  eyes:
+    pool:
+      - { color: "#AA0000", weight: 5 }
+      - { color: "#AAAA00", weight: 3 }
+      - { color: "#AA4400", weight: 2 }
+
+  outline: "#1A1A1A"
+
+  features:
+    hair:
+      joint: hair_top
+      z_order: 15
+      pool:
+        - { id: feature.hair_short, weight: 3 }
+        - { id: null, weight: 7 }
+    beard:
+      joint: beard
+      z_order: 14
+      pool:
+        - { id: null, weight: 10 }
+
+  hair_colors:
+    pool:
+      - { weight: 8, hair_base: "#111111", hair_shadow: "#000000", hair_highlight: "#333333" }
+      - { weight: 2, hair_base: "#3A2A1A", hair_shadow: "#1A0A00", hair_highlight: "#5A4A3A" }

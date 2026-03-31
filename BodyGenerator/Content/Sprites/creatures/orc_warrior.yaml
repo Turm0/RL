@@ -1,4 +1,4 @@
-id: orc_warrior
+id: creature.orc_warrior
 name: Orc Warrior
 body_template: humanoid
 pose: idle

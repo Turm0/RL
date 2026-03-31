@@ -1,0 +1,42 @@
+id: species.human
+type: species
+name: Human
+body_template: humanoid
+
+appearance:
+  skin:
+    pool:
+      - { weight: 5, base: "#E8B878", shadow: "#C89458", highlight: "#F4D4A0" }
+      - { weight: 3, base: "#C68642", shadow: "#8D5524", highlight: "#E0AC69" }
+      - { weight: 2, base: "#8D5524", shadow: "#6B3A1F", highlight: "#C68642" }
+
+  eyes:
+    pool:
+      - { color: "#2244AA", weight: 3 }
+      - { color: "#44AA22", weight: 2 }
+      - { color: "#664422", weight: 4 }
+      - { color: "#222222", weight: 1 }
+
+  outline: "#1A1A2A"
+
+  features:
+    hair:
+      joint: hair_top
+      z_order: 15
+      pool:
+        - { id: feature.hair_long, weight: 3 }
+        - { id: feature.hair_short, weight: 5 }
+        - { id: null, weight: 1 }
+    beard:
+      joint: beard
+      z_order: 14
+      pool:
+        - { id: feature.beard_short, weight: 2 }
+        - { id: null, weight: 8 }
+
+  hair_colors:
+    pool:
+      - { weight: 4, hair_base: "#442200", hair_shadow: "#221100", hair_highlight: "#664422" }
+      - { weight: 3, hair_base: "#111111", hair_shadow: "#000000", hair_highlight: "#333333" }
+      - { weight: 2, hair_base: "#CC8844", hair_shadow: "#996622", hair_highlight: "#EEAA66" }
+      - { weight: 1, hair_base: "#AA3311", hair_shadow: "#882200", hair_highlight: "#CC5533" }

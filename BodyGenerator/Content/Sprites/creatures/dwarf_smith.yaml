@@ -1,4 +1,4 @@
-id: dwarf_smith
+id: creature.dwarf_smith
 name: Dwarf Smith
 body_template: humanoid
 pose: idle
